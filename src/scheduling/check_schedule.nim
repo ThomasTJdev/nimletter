@@ -76,7 +76,7 @@ proc checkAndSendScheduledEmails*(minutesBack = 5, until = now().utc, isBackupRu
   release(gPendingEmailLock)
 
   for pendingEmail in pendingEmails:
-    echo "Sending email: " & pendingEmail[0]
+    echo "Sending email obj to thread: " & pendingEmail[0]
 
     mailChannel.send PendingMailObj(
       id: pendingEmail[0],

@@ -77,6 +77,8 @@ proc getMailData(flowStepID: string): string =
 
 proc sendPendingEmail(pendingEmail: PendingMailObj) =
   # Fetch user and email details
+  echo "Managing email obj: " & pendingEmail.id
+
   let userData = getUserData(pendingEmail.userID)
 
   var mailData: seq[string]
