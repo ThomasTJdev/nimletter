@@ -37,7 +37,7 @@ proc sendAwsSes*(
 
   # ---------- JSON payload ----------
   var payloadJson = %*{
-    "FromEmailAddress": smtpData.smtpFromEmail,
+    "FromEmailAddress": smtpData.smtpFromName & " <" & smtpData.smtpFromEmail & ">",
     "Destination": { "ToAddresses": [recipient] },
     "Content": {
       "Raw": { "Data": rawBase64 }

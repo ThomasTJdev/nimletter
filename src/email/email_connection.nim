@@ -167,6 +167,8 @@ proc sendMailMimeNow*(
 
 
   if smtpData.smtpUseAwsSes:
+    when defined(dev):
+      echo "Sending email via AWS SES"
     let (success, messageID, errorMessage) = sendAwsSes(smtpData, multi, recipient, replyTo)
     if success:
       return (success, messageID, smtpData.smtpMailspersecond)
@@ -176,6 +178,8 @@ proc sendMailMimeNow*(
 
   else:
     # Make SMTP connection
+    when defined(dev):
+      echo "Sending email via SMTP"
     const retries = 3
     for i in 1..retries:
       let (success, messageID, errorMessage) = sendIt(smtpData, recipient, multi)
