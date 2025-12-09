@@ -2,6 +2,7 @@
 import
   std/[
     json,
+    os,
     strutils,
     random,
     wordwrap
@@ -23,6 +24,9 @@ import
   ./email_variables
 
 
+type
+  SmtpData* = tuple[smtpHost: string, smtpPort: string, smtpUser: string, smtpPass: string, smtpFromEmail: string, smtpFromName: string, smtpMailspersecond: int]
+
 randomize()
 
 
@@ -43,15 +47,7 @@ proc smtpAuth(client: var Smtp, smtpHost, smtpPort, smtpUser, smtpPass: string) 
   client.connect(smtpHost, Port(smtpPort.parseInt()))
   client.auth(smtpUser, smtpPass)
 
-proc smtpData(): tuple[
-    smtpHost: string,
-    smtpPort: string,
-    smtpUser: string,
-    smtpPass: string,
-    smtpFromEmail: string,
-    smtpFromName: string,
-    smtpMailspersecond: int
-  ] =
+proc smtpData(): SmtpData =
 
   if getEnv("SMTP_HOST") != "":
     let maxMails = getEnv("SMTP_MAILSPERSECOND")
@@ -90,6 +86,33 @@ proc smtpData(): tuple[
         smtpMailspersecond: smtpDB[6].parseInt()
       )
     return result
+
+
+proc sendIt(smtpData: SmtpData, recipient: string, multi: MimeMessage): tuple[success: bool, messageID: string, errorMessage: string] =
+  var
+    client = newSmtp(useSsl = true)
+    success: bool
+    messageID: string
+
+  try:
+    client.connect(smtpData.smtpHost, Port(smtpData.smtpPort.parseInt()))
+  except:
+    echo "Error connecting to SMTP server: " & getCurrentExceptionMsg()
+    return (false, "", getCurrentExceptionMsg())
+
+  try:
+    client.auth(smtpData.smtpUser, smtpData.smtpPass)
+  except:
+    echo "Error authenticating to SMTP server: " & getCurrentExceptionMsg()
+    return (false, "", getCurrentExceptionMsg())
+
+  try:
+    (success, messageID) = sendMail(client, smtpData.smtpFromEmail, recipient, multi)
+  except:
+    echo "Error sending email: " & getCurrentExceptionMsg()
+    return (false, "", getCurrentExceptionMsg())
+
+  return (success, messageID, "")
 
 
 
@@ -143,23 +166,14 @@ proc sendMailMimeNow*(
     return (false, "SMTP_not_configured_" & $rand(100000), 1)
 
   # Make SMTP connection
-  var
-    client = newSmtp(useSsl = true)
-    success: bool
-    messageID: string
+  const retries = 3
+  for i in 1..retries:
+    let (success, messageID, errorMessage) = sendIt(smtpData, recipient, multi)
+    if success:
+      return (success, messageID, smtpData.smtpMailspersecond)
+    else:
+      echo "Error sending email (attempt " & $i & " of " & $retries & "): " & errorMessage
+      sleep(500)
+  return (false, "email_failed_" & $rand(100000), smtpData.smtpMailspersecond)
 
-  try:
-    client.connect(smtpData.smtpHost, Port(smtpData.smtpPort.parseInt()))
-    client.auth(smtpData.smtpUser, smtpData.smtpPass)
-    (success, messageID) = sendMail(client, smtpData.smtpFromEmail, recipient, multi)
-
-    when defined(dev):
-      echo "Message sent: " & $success
-      echo "Message ID:   " & messageID
-  except:
-    echo getCurrentExceptionMsg()
-    success = false
-    messageID = "email_failed_" & $rand(100000)
-
-  return (success, messageID, smtpData.smtpMailspersecond)
 
