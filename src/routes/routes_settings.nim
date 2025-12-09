@@ -151,7 +151,8 @@ proc(request: Request) =
         "smtp_user",
         "smtp_fromemail",
         "smtp_fromname",
-        "smtp_mailspersecond"
+        "smtp_mailspersecond",
+        "smtp_use_aws_ses"
       ]
     ))
 
@@ -164,7 +165,8 @@ proc(request: Request) =
       { "key": "smtpFrom", "name": "SMTP From", "value": smtpSettings[3] },
       { "key": "smtpFromName", "name": "SMTP From Name", "value": smtpSettings[4] },
       { "key": "smtpPass", "name": "SMTP Password", "value": "" },
-      { "key": "smtpMaxMailsPerSecond", "name": "Max Mails Per Second", "value": smtpSettings[5] }
+      { "key": "smtpMaxMailsPerSecond", "name": "Max Mails Per Second", "value": smtpSettings[5] },
+      { "key": "smtpUseAwsSes", "name": "Use AWS SES", "value": smtpSettings[6] == "t" or smtpSettings[6] == "true" }
     ]
   )
 )
@@ -184,6 +186,7 @@ proc(request: Request) =
     smtpFrom = @"smtpFrom"
     smtpFromName = @"smtpFromName"
     smtpMaxMailsPerSecond = @"smtpMaxMailsPerSecond"
+    smtpUseAwsSes = @"smtpUseAwsSes"
 
   if smtpHost.strip() == "":
     resp Http400, "SMTP Host is required"
@@ -224,7 +227,8 @@ proc(request: Request) =
           "smtp_password",
           "smtp_fromemail",
           "smtp_fromname",
-          "smtp_mailspersecond"
+          "smtp_mailspersecond",
+          "smtp_use_aws_ses"
         ]),
         smtpHost,
         smtpPort,
@@ -232,7 +236,8 @@ proc(request: Request) =
         smtpPass,
         smtpFrom,
         smtpFromName,
-        smtpMaxMailsPerSecond
+        smtpMaxMailsPerSecond,
+        @"smtpUseAwsSes" == "true"
       )
 
   resp Http200, "SMTP settings saved"

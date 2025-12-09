@@ -306,10 +306,12 @@ async function buildSettingsSMTP() {
           }),
           jsCreateElement('input', {
             attrs: {
+              style: 'min-height: 32px;',
               id: item.key,
               value: item.value,
+              checked: (item.key == 'smtpUseAwsSes') ? item.value : false,
               disabled: (item.key == 'smtpStorage') ? true : false,
-              type: (item.key == 'smtpPass') ? 'password' : 'text'
+              type: (item.key == 'smtpPass') ? 'password' : ((item.key == 'smtpUseAwsSes') ? 'checkbox' : 'text')
             }
           })
         ]
@@ -337,7 +339,11 @@ async function saveSettingsSMTP() {
 
   let data = {};
   smptSettings.forEach((item, i) => {
-    data[item.key] = document.getElementById(item.key).value;
+    if (item.key == 'smtpUseAwsSes') {
+      data[item.key] = document.getElementById(item.key).checked ? "true" : "false";
+    } else {
+      data[item.key] = document.getElementById(item.key).value;
+    }
   });
 
   fetch('/api/settings/smtp', {

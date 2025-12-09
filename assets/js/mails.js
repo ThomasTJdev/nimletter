@@ -165,8 +165,20 @@ function addMailDo() {
 }
 
 
+async function loadMailToVars(id) {
+  const data = await fetch("/api/mails/get?mailID=" + id, {
+    method: "GET"
+  })
+  .then(manageErrors)
+  .then(response => response.json())
+  .then(data => {
+    globalMailEditorContent = data.contentEditor;
+    emailbuilderShow('setJSON');
+  });
+}
 
-function loadMail(id) {
+
+async function loadMail(id) {
   fetch("/api/mails/get?mailID=" + id, {
     method: "GET"
   })
@@ -542,7 +554,7 @@ function loadMail(id) {
           jsCreateElement('button', {
             attrs: {
               class: 'buttonIcon',
-              onclick: 'emailbuilderShow(\'setJSON\')'
+              onclick: 'loadMailToVars(' + globalMailData.id + ')'
             },
             rawHtml: [
               '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg><div class="ml5">Edit mail with EmailBuilder</div>'

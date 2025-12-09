@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS smtp_settings (
   smtp_fromemail      TEXT NOT NULL,
   smtp_fromname       TEXT NOT NULL,
   smtp_mailspersecond INT DEFAULT 1,
+  smtp_use_aws_ses    BOOLEAN DEFAULT FALSE,
   created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -241,3 +242,4 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_email_clicks_user_id ON email_clicks
 -- Changelog
 ALTER TABLE flows ADD COLUMN IF NOT EXISTS is_deleted TIMESTAMP DEFAULT NULL;
 ALTER TABLE lists ADD COLUMN IF NOT EXISTS is_deleted TIMESTAMP DEFAULT NULL;
+ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS smtp_use_aws_ses BOOLEAN DEFAULT FALSE;

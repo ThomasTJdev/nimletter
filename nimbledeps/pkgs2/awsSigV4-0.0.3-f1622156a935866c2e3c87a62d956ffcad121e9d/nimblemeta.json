@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "metaData": {
+    "url": "https://github.com/ThomasTJdev/nim_awsSigV4",
+    "downloadMethod": "git",
+    "vcsRevision": "6e23455792456a22ef72d9d3309b473290325387",
+    "files": [
+      "/awsSigV4.nimble",
+      "/awsSigV4.nim"
+    ],
+    "binaries": [],
+    "specialVersions": [
+      "0.0.3"
+    ]
+  }
+}

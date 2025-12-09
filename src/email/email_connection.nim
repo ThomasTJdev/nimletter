@@ -13,6 +13,7 @@ from std/os import getEnv
 
 import
   awsSES_SNS,
+  awsSigV4,
   mime,
   sqlbuilder
 
@@ -21,11 +22,10 @@ import
   ../database/database_connection
 
 import
-  ./email_variables
+  ./email_aws_ses,
+  ./email_variables,
+  ./email_types
 
-
-type
-  SmtpData* = tuple[smtpHost: string, smtpPort: string, smtpUser: string, smtpPass: string, smtpFromEmail: string, smtpFromName: string, smtpMailspersecond: int]
 
 randomize()
 
@@ -43,10 +43,6 @@ proc sendMail(
     return (false, getCurrentExceptionMsg())
 
 
-proc smtpAuth(client: var Smtp, smtpHost, smtpPort, smtpUser, smtpPass: string) =
-  client.connect(smtpHost, Port(smtpPort.parseInt()))
-  client.auth(smtpUser, smtpPass)
-
 proc smtpData(): SmtpData =
 
   if getEnv("SMTP_HOST") != "":
@@ -58,7 +54,8 @@ proc smtpData(): SmtpData =
       smtpPass: getEnv("SMTP_PASSWORD"),
       smtpFromEmail: getEnv("SMTP_FROMEMAIL"),
       smtpFromName: getEnv("SMTP_FROMNAME"),
-      smtpMailspersecond: if maxMails != "": maxMails.parseInt() else: 1
+      smtpMailspersecond: if maxMails != "": maxMails.parseInt() else: 1,
+      smtpUseAwsSes: getEnv("SMTP_USE_AWS_SES") == "true"
     )
 
   else:
@@ -72,7 +69,8 @@ proc smtpData(): SmtpData =
           "smtp_password",
           "smtp_fromemail",
           "smtp_fromname",
-          "smtp_mailspersecond"
+          "smtp_mailspersecond",
+          "smtp_use_aws_ses"
         ]
       ))
 
@@ -83,12 +81,14 @@ proc smtpData(): SmtpData =
         smtpPass: smtpDB[3],
         smtpFromEmail: smtpDB[4],
         smtpFromName: smtpDB[5],
-        smtpMailspersecond: smtpDB[6].parseInt()
+        smtpMailspersecond: smtpDB[6].parseInt(),
+        smtpUseAwsSes: smtpDB[7] == "t" or smtpDB[7] == "true"
       )
     return result
 
 
 proc sendIt(smtpData: SmtpData, recipient: string, multi: MimeMessage): tuple[success: bool, messageID: string, errorMessage: string] =
+  ## Basic SMTP connection and send email
   var
     client = newSmtp(useSsl = true)
     success: bool
@@ -150,6 +150,7 @@ proc sendMailMimeNow*(
   # Add first part to message
   multi.parts.add(first)
 
+
   when defined(dev):
     echo "\n"
     echo "##################"
@@ -160,20 +161,29 @@ proc sendMailMimeNow*(
     echo "\n"
     when not defined(forcemail):
       return (true, "dev" & $rand(100000), 1)
-
   if smtpData.smtpHost == "smtp_host":
     echo "SMTP not configured"
     return (false, "SMTP_not_configured_" & $rand(100000), 1)
 
-  # Make SMTP connection
-  const retries = 3
-  for i in 1..retries:
-    let (success, messageID, errorMessage) = sendIt(smtpData, recipient, multi)
+
+  if smtpData.smtpUseAwsSes:
+    let (success, messageID, errorMessage) = sendAwsSes(smtpData, multi, recipient, replyTo)
     if success:
       return (success, messageID, smtpData.smtpMailspersecond)
     else:
-      echo "Error sending email (attempt " & $i & " of " & $retries & "): " & errorMessage
-      sleep(500)
-  return (false, "email_failed_" & $rand(100000), smtpData.smtpMailspersecond)
+      echo "Error sending email (attempt 1 of 1): " & errorMessage
+      return (false, "email_failed_" & $rand(100000), smtpData.smtpMailspersecond)
+
+  else:
+    # Make SMTP connection
+    const retries = 3
+    for i in 1..retries:
+      let (success, messageID, errorMessage) = sendIt(smtpData, recipient, multi)
+      if success:
+        return (success, messageID, smtpData.smtpMailspersecond)
+      else:
+        echo "Error sending email (attempt " & $i & " of " & $retries & "): " & errorMessage
+        sleep(500)
+    return (false, "email_failed_" & $rand(100000), smtpData.smtpMailspersecond)
 
 

@@ -41,6 +41,11 @@
             "name": "mummy",
             "version": "0.4.1",
             "checksum": "4b42e2d861877701288ea069a743dc74b6786e02"
+          },
+          {
+            "name": "awsSigV4",
+            "version": "0.0.3",
+            "checksum": "f1622156a935866c2e3c87a62d956ffcad121e9d"
           }
         ]
       }

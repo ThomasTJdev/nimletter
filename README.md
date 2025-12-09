@@ -8,7 +8,7 @@ Nimletter is built to replace the simple functionalities found in Mailchimp, Mai
 
 ## ✨ Features
 
-- 🚀 **BYO SMTP server**
+- 🚀 **BYO SMTP server or use AWS SES**
 - 📊 **Open and click tracking integrated without setup**
 - 📊 **Bounce, complaint tracking with AWS or other callback**
 - 🖱️ **Drag and Drop email builder**
