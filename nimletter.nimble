@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.8.1"
+version       = "0.8.2"
 author        = "ThomasTJdev"
 description   = "Newsletter"
 license       = "AGPL v3"
@@ -17,7 +17,7 @@ requires "https://github.com/ThomasTJdev/nim-schedules == 0.2.0"
 requires "https://github.com/ThomasTJdev/nimMime >= 0.0.3"
 requires "https://github.com/ThomasTJdev/bcryptnim == 0.2.1"
 requires "https://github.com/ThomasTJdev/nim-mmgeoip == 0.1.0"
-requires "https://github.com/ThomasTJdev/nim_awsSigV4 >= 0.1.0"
+requires "https://github.com/ThomasTJdev/nim_awsSigV4 >= 0.0.3"
 
 # Cache responses
 #requires "https://github.com/ThomasTJdev/ready == 0.1.8"
