@@ -72,7 +72,7 @@ function tableContacts() {
     height:"70vh",
     layout:"fitColumns",
     ajaxURL:"/api/contacts/all",
-    paginationSize:5000,
+    paginationSize:15000,
     progressiveLoad:"load",
     initialSort:[
       {column:"status", dir:"desc"},
