@@ -219,7 +219,7 @@ when isMainModule:
   #
   let server = newServer(
         routerMain,
-        workerThreads = (when defined(dev): 4 else: max(countProcessors() * 20, 1)),
+        workerThreads = (when defined(dev): 4 else: max(countProcessors() * 20, 4)),
         maxBodyLen = 1024 * 1024 * 30, # 30 MB
       )
 
