@@ -28,9 +28,9 @@ proc(request: Request) =
 
   acquire(gFilecacheLock)
 
-  # if not assets.hasKey(path):
-  #   release(gFilecacheLock)
-  #   resp Http404
+  if path notin approvedPaths:
+    release(gFilecacheLock)
+    resp Http404
 
   var headers: HttpHeaders
   {.gcsafe.}:
