@@ -382,8 +382,10 @@ proc(request: Request) =
         "mails.category",
         "to_char(mails.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
         "to_char(mails.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
-        "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
-        "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
+        "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
+        "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
+        "(SELECT COUNT(DISTINCT email_opens.id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as opened_count",
+        "(SELECT COUNT(DISTINCT email_clicks.id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as clicked_count",
         "mails.identifier"
       ],
       joinargs = [
@@ -415,7 +417,9 @@ proc(request: Request) =
         "updated_at": mail[6],
         "sent_count": mail[7].parseInt(),
         "pending_count": mail[8].parseInt(),
-        "identifier": mail[9]
+        "opened_count": mail[9].parseInt(),
+        "clicked_count": mail[10].parseInt(),
+        "identifier": mail[11]
       }
     )
 

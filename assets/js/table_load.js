@@ -248,6 +248,8 @@ function tableMails() {
       }},
       {title:"Sent count", field:"sent_count", vertAlign: "middle", width:120, headerFilter:true},
       {title:"Pending count", field:"pending_count", vertAlign: "middle", width:120, headerFilter:true},
+      {title:"Opened count", field:"opened_count", vertAlign: "middle", width:120, headerFilter:true},
+      {title:"Clicked count", field:"clicked_count", vertAlign: "middle", width:120, headerFilter:true},
       {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
       {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
     ],

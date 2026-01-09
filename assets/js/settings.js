@@ -105,6 +105,9 @@ function showTab(tab) {
         updateAPI(row.getData().id);
       });
 
+      // Add CSV download context menu
+      addTabulatorContextMenu(objTableApi, "api_keys.csv");
+
     });
   }
 
@@ -130,6 +133,9 @@ function showTab(tab) {
       objTableWebhooks.on("rowClick", function(e, row){
         deleteWebhook(row.getData().id);
       });
+
+      // Add CSV download context menu
+      addTabulatorContextMenu(objTableWebhooks, "webhooks.csv");
 
     });
   }
@@ -157,6 +163,9 @@ function showTab(tab) {
           deleteUser(cell.getData().id);
         }
       });
+
+      // Add CSV download context menu
+      addTabulatorContextMenu(objTableUsers, "users.csv");
     });
 
   }
