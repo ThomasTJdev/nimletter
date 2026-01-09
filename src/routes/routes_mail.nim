@@ -616,3 +616,50 @@ proc(request: Request) =
     resp Http200, "Mail sent to listID: " & listID
 
 )
+
+# Check if an email is used in any flow steps
+mailRouter.get("/api/mails/check_flows",
+proc(request: Request) =
+  createTFD()
+  if not c.loggedIn: resp Http401
+
+  let mailID = @"mailID"
+
+  if not mailID.isValidInt():
+    resp Http400, "Invalid mail ID"
+
+  var flowSteps: seq[seq[string]]
+  pg.withConnection conn:
+    flowSteps = getAllRows(conn, sqlSelect(
+      table   = "flow_steps",
+      select  = [
+        "flow_steps.id",
+        "flow_steps.flow_id",
+        "flow_steps.step_number",
+        "flows.name as flow_name"
+      ],
+      joinargs = [
+        (table: "flows", tableAs: "", on: @["flows.id = flow_steps.flow_id"])
+      ],
+      where   = ["flow_steps.mail_id = ?"]
+    ), mailID)
+
+  var respData = parseJson("[]")
+  for row in flowSteps:
+    respData.add(
+      %* {
+        "flow_step_id": row[0],
+        "flow_id": row[1],
+        "step_number": row[2],
+        "flow_name": row[3]
+      }
+    )
+
+  resp Http200, (
+    %* {
+      "used_in_flows": flowSteps.len > 0,
+      "flow_steps": respData,
+      "count": flowSteps.len
+    }
+  )
+)

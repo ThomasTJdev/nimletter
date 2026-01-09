@@ -752,7 +752,7 @@ function switchEditorDo() {
 }
 
 
-function saveMail(mailID) {
+async function saveMail(mailID) {
   // if (!dqs(".mailSave").classList.contains("active")) {
   //   return;
   // }
@@ -764,6 +764,28 @@ function saveMail(mailID) {
     tags = dqs("#mailEditTags").value,
     category = dqs("#mailEditCategory").value,
     sendOnce = dqs("#sendOnce").checked;
+
+  // Check if user is trying to archive an email that's used in flows
+  const previousCategory = globalMailData ? globalMailData.category : null;
+  if (category === "archived" && previousCategory !== "archived") {
+    // Check if email is used in flows
+    const flowCheck = await fetch("/api/mails/check_flows?mailID=" + mailID, {
+      method: "GET"
+    })
+    .then(manageErrors)
+    .then(response => response.json());
+
+    if (flowCheck.used_in_flows && flowCheck.count > 0) {
+      // Show warning and require confirmation
+      const flowNames = flowCheck.flow_steps.map(fs => fs.flow_name).join(", ");
+      const confirmed = await confirmArchiveMailInFlows(mailID, name, flowCheck.count, flowNames);
+      if (!confirmed) {
+        // User cancelled, revert category dropdown
+        dqs("#mailEditCategory").value = previousCategory || "";
+        return;
+      }
+    }
+  }
 
   let
     contentHTML,
@@ -805,6 +827,10 @@ function saveMail(mailID) {
   .then(manageErrors)
   .then(() => {
     dqs(".mailSave").classList.remove("active");
+    // Update globalMailData to reflect the new category
+    if (globalMailData) {
+      globalMailData.category = category;
+    }
   });
 }
 
@@ -979,4 +1005,132 @@ function sendMailPersonDo(mailID) {
   .then(() => {
     rawModalSuccess();
   });
+}
+
+// -- Confirm archiving email that's used in flows
+function confirmArchiveMailInFlows(mailID, mailName, flowCount, flowNames) {
+  return new Promise((resolve) => {
+    const html = jsCreateElement('div', {
+      attrs: {
+        style: "width: 500px;"
+      },
+      children: [
+        jsCreateElement('div', {
+          attrs: {
+            class: 'headingH3 mb20 center'
+          },
+          children: ['WARNING: Email Used in Flows']
+        }),
+        jsCreateElement('div', {
+          attrs: {
+            style: "font-size: 12px;margin:20px;",
+            class: 'center'
+          },
+          rawHtml: [
+            '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg><br>You are about to archive the email "<b>' + mailName + '</b>" which is currently used in <b>' + flowCount + '</b> flow step(s).'
+          ]
+        }),
+        jsCreateElement('div', {
+          attrs: {
+            style: "font-size: 12px;margin:20px;"
+          },
+          children: [
+            'This email is used in the following flow(s): ' + flowNames
+          ]
+        }),
+        jsCreateElement('div', {
+          attrs: {
+            style: "font-size: 12px;margin:20px;",
+            class: 'center'
+          },
+          rawHtml: [
+            '<b>Archiving this email could result in sending emails that were meant to be archived if the flow steps are modified.</b>'
+          ]
+        }),
+        jsCreateElement('div', {
+          attrs: {
+            style: "font-size: 12px;margin:20px;"
+          },
+          children: [
+            'Please type CONFIRM to proceed with archiving this email.'
+          ]
+        }),
+        jsCreateElement('input', {
+          attrs: {
+            type: 'text',
+            id: 'mailArchiveValidate',
+            placeholder: 'Write CONFIRM to continue',
+            oninput: 'if(this.value == "CONFIRM"){dqs("#mailArchiveButton").disabled = false;} else {dqs("#mailArchiveButton").disabled = true;}',
+            class: 'mb20'
+          }
+        }),
+        jsCreateElement('div', {
+          children: [
+            jsCreateElement('button', {
+              attrs: {
+                id: 'mailArchiveButton',
+                class: 'svg30 w100p',
+                onclick: 'confirmArchiveMailInFlowsDo()',
+                disabled: true
+              },
+              rawHtml: [
+                '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg><div style="margin-left: 5px;">Confirm archive</div>'
+              ]
+            })
+          ]
+        }),
+        jsCreateElement('div', {
+          children: [
+            jsCreateElement('button', {
+              attrs: {
+                class: 'buttonIcon mt20',
+                onclick: 'cancelArchiveMailInFlows()'
+              },
+              rawHtml: [
+                '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg><div style="margin-left: 5px;">Cancel</div>'
+              ]
+            })
+          ]
+        })
+      ]
+    });
+
+    // Store the resolve function
+    window._archiveMailResolve = resolve;
+
+    rawModalLoader(jsRender(html));
+    setTimeout(() => {
+      dqs("#mailArchiveValidate").focus();
+      labelFloater();
+    }, 100);
+  });
+}
+
+function confirmArchiveMailInFlowsDo() {
+  let validate = dqs("#mailArchiveValidate").value;
+
+  if (validate !== "CONFIRM") {
+    rawModalError("Invalid confirmation");
+    return;
+  }
+
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Resolve the promise with true (confirmed)
+  if (window._archiveMailResolve) {
+    window._archiveMailResolve(true);
+    window._archiveMailResolve = null;
+  }
+}
+
+function cancelArchiveMailInFlows() {
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Resolve the promise with false (cancelled)
+  if (window._archiveMailResolve) {
+    window._archiveMailResolve(false);
+    window._archiveMailResolve = null;
+  }
 }
