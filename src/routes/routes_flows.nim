@@ -703,8 +703,7 @@ proc(request: Request) =
           "pending_emails.status",
           "to_char(pending_emails.scheduled_for, 'YYYY-MM-DD HH24:MI:SS') as scheduled_for",
           "to_char(pending_emails.sent_at, 'YYYY-MM-DD HH24:MI:SS') as sent_at",
-          "contacts.email",
-          "(SELECT COUNT(*) FROM email_opens WHERE email_opens.pending_email_id = pending_emails.id) as open_count"
+          "contacts.email"
           ],
           joinargs = [
             (table: "contacts", tableAs: "", on: @["contacts.id = pending_emails.user_id"])
@@ -722,7 +721,6 @@ proc(request: Request) =
       "status": row[1],
       "scheduled_for": row[2],
       "sent_at": row[3],
-      "open_count": row[5],
       }
     )
 
