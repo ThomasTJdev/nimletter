@@ -21,7 +21,7 @@ proc parseCsv(csvFile: string): seq[tuple[email: string, name: string, flowStep:
     var contact: tuple[email: string, name: string, flowStep: int] = (email: "", name: "", flowStep: 1)
     for col in items(p.headers):
       if col == "email":
-        contact.email = p.rowEntry(col)
+        contact.email = p.rowEntry(col).toLowerAscii()
       elif col == "name":
         contact.name = p.rowEntry(col)
       elif col == "flow_step":
@@ -112,10 +112,10 @@ proc loopContacts(csvFile: string, endpoint: string, bearerToken: string, listId
   for contact in contacts:
     if contactExists(client, endpoint, contact.email):
       addContactToList(client, endpoint, contact.email, contact.name, listIdentifier, contact.flowStep)
-      newContacts += 1
+      existingContacts += 1
     else:
       addContactAndAddToList(client, endpoint, contact.email, contact.name, listIdentifier, contact.flowStep)
-      existingContacts += 1
+      newContacts += 1
 
   echo "✅ Added ", newContacts, " new contacts"
   echo "✅ Added ", existingContacts, " existing contacts"
