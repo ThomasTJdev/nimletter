@@ -316,6 +316,98 @@ function isStylesheetInjected(src) {
 
 
 /*
+  Tabulator CSV Download Context Menu
+  Adds a right-click context menu to tabulator instances for CSV download
+*/
+function addTabulatorContextMenu(tabulatorInstance, defaultFilename = "data.csv") {
+  if (!tabulatorInstance) return;
+
+  // Get the tabulator element
+  const tableElement = tabulatorInstance.element;
+  if (!tableElement) return;
+
+  // Create or get shared context menu element
+  let contextMenu = dqs('.tabulator-context-menu');
+  if (!contextMenu) {
+    contextMenu = document.createElement('div');
+    contextMenu.className = 'tabulator-context-menu';
+    contextMenu.style.cssText = `
+      position: fixed;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      padding: 4px 0;
+      z-index: 10000;
+      display: none;
+      min-width: 150px;
+    `;
+
+    const menuItem = document.createElement('div');
+    menuItem.textContent = 'Download CSV';
+    menuItem.style.cssText = `
+      padding: 8px 16px;
+      cursor: pointer;
+      user-select: none;
+    `;
+    menuItem.onmouseover = () => menuItem.style.backgroundColor = '#f0f0f0';
+    menuItem.onmouseout = () => menuItem.style.backgroundColor = 'transparent';
+    contextMenu.appendChild(menuItem);
+    document.body.appendChild(contextMenu);
+  }
+
+  const menuItem = contextMenu.querySelector('div');
+
+  // Add right-click event listener to the table
+  tableElement.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Hide any existing context menus
+    contextMenu.style.display = 'none';
+
+    // Set menu item click handler for this specific table
+    menuItem.onclick = (clickEvent) => {
+      clickEvent.stopPropagation();
+      const filename = prompt('Enter filename:', defaultFilename) || defaultFilename;
+      if (filename) {
+        tabulatorInstance.download("csv", filename, { bom: true });
+      }
+      contextMenu.style.display = 'none';
+    };
+
+    // Position the context menu at the cursor (with bounds checking)
+    const x = Math.min(e.pageX, window.innerWidth - 160);
+    const y = Math.min(e.pageY, window.innerHeight - 50);
+    contextMenu.style.left = x + 'px';
+    contextMenu.style.top = y + 'px';
+    contextMenu.style.display = 'block';
+
+    // Close menu when clicking elsewhere or pressing ESC
+    const closeMenuHandler = (event) => {
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        contextMenu.style.display = 'none';
+        document.removeEventListener('click', closeMenuHandler);
+        document.removeEventListener('keydown', closeMenuHandler);
+        return;
+      }
+      if (event.type === 'click' && !contextMenu.contains(event.target) && !tableElement.contains(event.target)) {
+        contextMenu.style.display = 'none';
+        document.removeEventListener('click', closeMenuHandler);
+        document.removeEventListener('keydown', closeMenuHandler);
+      }
+    };
+
+    // Use setTimeout to avoid immediate closure
+    setTimeout(() => {
+      document.addEventListener('click', closeMenuHandler);
+      document.addEventListener('keydown', closeMenuHandler);
+    }, 10);
+  });
+}
+
+
+/*
   Label designer
 */
 function labelFloater() {

@@ -168,6 +168,9 @@ function tableContacts() {
     loadContact(row.getData().id);
   });
 
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableContacts, "contacts.csv");
+
 }
 
 
@@ -264,6 +267,9 @@ function tableMails() {
     let id = window.location.search.split("viewMail=")[1];
     loadMail(id);
   }
+
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableMails, "mails.csv");
 }
 
 
@@ -310,6 +316,9 @@ function tableLists() {
     }
     openList(cell.getRow().getData().id);
   });
+
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableLists, "lists.csv");
 }
 
 
@@ -352,6 +361,9 @@ function tableFlows() {
     }
     openFlow(cell.getRow().getData().id, cell.getRow().getData().name);
   });
+
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableFlows, "flows.csv");
 }
 
 
@@ -382,6 +394,9 @@ function tableFlowsteps(flowID) {
       {title:"Updated At", field:"updated_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 200},
     ],
   });
+
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableFlowsteps, "flowsteps.csv");
 }
 
 
@@ -452,6 +467,8 @@ function tableMaillog() {
     ],
   });
 
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableMaillog, "maillog.csv");
 }
 
 function mailLogLoad(status) {
