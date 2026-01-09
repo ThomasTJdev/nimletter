@@ -1,7 +1,8 @@
 let
   globalFlowID,
   globalFlowName,
-  globalFlowStepsData = [];
+  globalFlowStepsData = [],
+  globalMailsData = []; // Store mails data to check archived status
 
 
 // -- Add flow
@@ -101,6 +102,7 @@ function addFlowDo() {
   .then(response => response.json())
   .then(data => {
     dqs(".modalpop").remove();
+    objTableFlows.setData();
     openFlow(data.id);
   });
 
@@ -201,7 +203,32 @@ async function buildFlowHTML(data) {
   .then(response => response.json())
   .then(data => data.data);
 
+  // Store mails data globally for archived status checks
+  globalMailsData = mails;
 
+  // Create a map for quick mail lookups by ID
+  window._mailMap = {};
+  for (let i = 0; i < mails.length; i++) {
+    const mailId = mails[i].id;
+    window._mailMap[mailId] = mails[i];
+    window._mailMap[String(mailId)] = mails[i]; // Also store as string for flexibility
+    // Also store with parseInt for number comparisons
+    if (typeof mailId === 'string' && !isNaN(parseInt(mailId))) {
+      window._mailMap[parseInt(mailId)] = mails[i];
+    }
+  }
+
+  // Debug: Log archived mails
+  const archivedMails = mails.filter(m => m.category === "archived");
+  console.log("Archived mails found:", archivedMails.length, archivedMails.map(m => ({id: m.id, name: m.name})));
+
+
+
+  // Store step data with mail_id for quick lookups
+  window._flowStepsData = {};
+  data.forEach(step => {
+    window._flowStepsData[step.id] = step;
+  });
 
   let flowSteps = [];
   data.forEach(step => {
@@ -429,13 +456,34 @@ async function buildFlowHTML(data) {
   dqs("#work").innerHTML = "";
   dqs("#work").appendChild(jsRender(html));
 
-  // On changes in input and select call: updateFlowStep
+  // Initialize previous values for all inputs and selects
   let inputs = document.querySelectorAll("input, select");
   for (let i = 0; i < inputs.length; i++) {
+    if (inputs[i].tagName === "SELECT") {
+      inputs[i].dataset.previousValue = inputs[i].value;
+    } else {
+      inputs[i].dataset.previousValue = inputs[i].value;
+    }
+  }
+
+  // On changes in input and select call: updateFlowStep
+  for (let i = 0; i < inputs.length; i++) {
     inputs[i].addEventListener("change", function() {
+      // Extract stepId from element ID (format: flowStepXXX_stepId)
+      const idParts = this.id.split("_");
+      const stepId = idParts.length > 1 ? idParts[1] : null;
+
+      // Skip if we can't extract stepId (shouldn't happen for flow step elements)
+      if (!stepId) {
+        console.warn("Could not extract stepId from element ID:", this.id);
+        return;
+      }
+
+      // Store previous value for potential revert
+      const previousValue = this.dataset.previousValue || this.value;
+
       // Check if this is a trigger type selection
       if (this.id.startsWith("flowStepTrigger_")) {
-        const stepId = this.id.split("_")[1];
         // Show/hide time or delay input based on trigger type
         if (this.value === "time") {
           document.getElementById("flowStepTime_" + stepId).style.display = "";
@@ -446,8 +494,109 @@ async function buildFlowHTML(data) {
         }
       }
 
-      // Call updateFlowStep for all changes
-      updateFlowStep(this.id.split("_")[1]);
+      // Check if the selected email is archived before updating
+      // This applies to mail selection, trigger, and delay changes
+      const mailSelect = document.getElementById("flowStepMail_" + stepId);
+      let selectedMailID = mailSelect ? mailSelect.value : null;
+
+      // Also check the step's original mail_id from data as fallback
+      const stepData = window._flowStepsData ? window._flowStepsData[stepId] : null;
+      const originalMailID = stepData ? stepData.mail_id : null;
+
+      // Use dropdown value if available, otherwise use original mail_id
+      if (!selectedMailID || selectedMailID === "") {
+        selectedMailID = originalMailID;
+      }
+
+      // ALWAYS require confirmation when changing the email in a flow step
+      if (this.id.startsWith("flowStepMail_")) {
+        // Store element reference and previous value for revert
+        const elementToRevert = this;
+        const valueToRevert = previousValue;
+        const newMailID = this.value;
+
+        // Find the new mail to get its name for the confirmation message
+        let newMail = (window._mailMap && window._mailMap[newMailID]) ||
+                     (window._mailMap && window._mailMap[String(newMailID)]);
+        if (!newMail && globalMailsData) {
+          newMail = globalMailsData.find(mail => mail.id == newMailID || String(mail.id) === String(newMailID));
+        }
+
+        const newMailName = newMail ? newMail.name : "selected email";
+        const isArchived = newMail && newMail.category === "archived";
+
+        confirmFlowStepChangeEmail(stepId, newMailName, isArchived, () => {
+          // User confirmed, proceed with update
+          elementToRevert.dataset.previousValue = elementToRevert.value;
+          updateFlowStep(stepId);
+        }, () => {
+          // User cancelled, revert the change
+          elementToRevert.value = valueToRevert || "";
+        });
+        return; // Don't update yet, wait for confirmation
+      }
+
+      // Check if we're modifying trigger/delay on an archived email
+      if (selectedMailID && selectedMailID !== "" && selectedMailID !== null &&
+          (this.id.startsWith("flowStepTrigger_") ||
+           this.id.startsWith("flowStepDelay_") ||
+           this.id.startsWith("flowStepTime_"))) {
+
+        // Find the selected mail using the map for faster lookup
+        let selectedMail = (window._mailMap && window._mailMap[selectedMailID]) ||
+                          (window._mailMap && window._mailMap[String(selectedMailID)]);
+
+        // Fallback to array search if map lookup fails
+        if (!selectedMail && globalMailsData) {
+          selectedMail = globalMailsData.find(mail => {
+            const mailId = mail.id;
+            const compareId = selectedMailID;
+            return mailId == compareId ||
+                   String(mailId) === String(compareId) ||
+                   (typeof mailId === 'number' && mailId === parseInt(compareId)) ||
+                   (typeof compareId === 'number' && compareId === parseInt(mailId));
+          });
+        }
+
+        // If the email is archived, show confirmation popup
+        if (selectedMail && selectedMail.category === "archived") {
+          // Store element reference and previous value for revert
+          const elementToRevert = this;
+          const valueToRevert = previousValue;
+
+          confirmFlowStepChange(stepId, () => {
+            // User confirmed, proceed with update
+            // Update the previous value to the new value
+            elementToRevert.dataset.previousValue = elementToRevert.value;
+            updateFlowStep(stepId);
+          }, () => {
+            // User cancelled, revert the change
+            if (elementToRevert.tagName === "SELECT") {
+              elementToRevert.value = valueToRevert || "";
+              // Trigger UI update if needed for trigger type changes
+              if (elementToRevert.id.startsWith("flowStepTrigger_")) {
+                const stepIdForRevert = elementToRevert.id.split("_")[1];
+                if (valueToRevert === "time") {
+                  document.getElementById("flowStepTime_" + stepIdForRevert).style.display = "";
+                  document.getElementById("flowStepDelay_" + stepIdForRevert).style.display = "none";
+                } else {
+                  document.getElementById("flowStepTime_" + stepIdForRevert).style.display = "none";
+                  document.getElementById("flowStepDelay_" + stepIdForRevert).style.display = "";
+                }
+              }
+            } else {
+              elementToRevert.value = valueToRevert || "";
+            }
+            // Keep the previous value as it was (don't update dataset)
+          });
+          return; // Don't update yet, wait for confirmation
+        }
+      }
+
+      // Call updateFlowStep for all changes (if not archived or no mail selected)
+      // Update the previous value to the new value for next change
+      this.dataset.previousValue = this.value;
+      updateFlowStep(stepId);
     });
   }
 
@@ -690,6 +839,237 @@ function addFlowStepDo() {
 }
 
 
+// -- Confirm flow step email change (always required)
+function confirmFlowStepChangeEmail(flowStepID, emailName, isArchived, onConfirm, onCancel) {
+  const warningText = isArchived
+    ? 'You are about to change the email in this flow step to an <b>archived email</b> (' + emailName + '). This could result in sending emails that were meant to be archived.'
+    : 'You are about to change the email in this flow step to "' + emailName + '".';
+
+  const html = jsCreateElement('div', {
+    attrs: {
+      style: "width: 400px;"
+    },
+    children: [
+      jsCreateElement('div', {
+        attrs: {
+          class: 'headingH3 mb20 center'
+        },
+        children: ['Confirm Email Change']
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          style: "font-size: 12px;margin:20px;",
+          class: 'center'
+        },
+        rawHtml: [
+          isArchived
+            ? '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg><br>'
+            : '',
+          warningText
+        ]
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          style: "font-size: 12px;margin:20px;"
+        },
+        children: [
+          'Please type CONFIRM to proceed with the change.'
+        ]
+      }),
+      jsCreateElement('input', {
+        attrs: {
+          type: 'text',
+          id: 'flowStepChangeEmailValidate',
+          placeholder: 'Write CONFIRM to continue',
+          oninput: 'if(this.value == "CONFIRM"){dqs("#flowStepChangeEmailButton").disabled = false;} else {dqs("#flowStepChangeEmailButton").disabled = true;}',
+          class: 'mb20'
+        }
+      }),
+      jsCreateElement('div', {
+        children: [
+          jsCreateElement('button', {
+            attrs: {
+              id: 'flowStepChangeEmailButton',
+              class: 'svg30 w100p',
+              onclick: 'confirmFlowStepChangeEmailDo(' + flowStepID + ')',
+              disabled: true
+            },
+            rawHtml: [
+              '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg><div style="margin-left: 5px;">Confirm change</div>'
+            ]
+          })
+        ]
+      }),
+      jsCreateElement('div', {
+        children: [
+          jsCreateElement('button', {
+            attrs: {
+              class: 'buttonIcon mt20',
+              onclick: 'cancelFlowStepChangeEmail()'
+            },
+            rawHtml: [
+              '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg><div style="margin-left: 5px;">Cancel</div>'
+            ]
+          })
+        ]
+      })
+    ]
+  });
+
+  // Store the callbacks for later execution
+  window._flowStepChangeEmailCallback = onConfirm;
+  window._flowStepChangeEmailCancelCallback = onCancel;
+
+  rawModalLoader(jsRender(html));
+  setTimeout(() => {
+    dqs("#flowStepChangeEmailValidate").focus();
+    labelFloater();
+  }, 100);
+}
+
+function confirmFlowStepChangeEmailDo(flowStepID) {
+  let validate = dqs("#flowStepChangeEmailValidate").value;
+
+  if (validate !== "CONFIRM") {
+    rawModalError("Invalid confirmation");
+    return;
+  }
+
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Execute the stored callback to update the flow step
+  if (window._flowStepChangeEmailCallback) {
+    window._flowStepChangeEmailCallback();
+    window._flowStepChangeEmailCallback = null;
+  }
+  window._flowStepChangeEmailCancelCallback = null;
+}
+
+function cancelFlowStepChangeEmail() {
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Execute the cancel callback to revert changes
+  if (window._flowStepChangeEmailCancelCallback) {
+    window._flowStepChangeEmailCancelCallback();
+    window._flowStepChangeEmailCancelCallback = null;
+  }
+  window._flowStepChangeEmailCallback = null;
+}
+
+// -- Confirm flow step change for archived emails
+function confirmFlowStepChange(flowStepID, onConfirm, onCancel) {
+  const html = jsCreateElement('div', {
+    attrs: {
+      style: "width: 400px;"
+    },
+    children: [
+      jsCreateElement('div', {
+        attrs: {
+          class: 'headingH3 mb20 center'
+        },
+        children: ['WARNING: Archived Email']
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          style: "font-size: 12px;margin:20px;",
+          class: 'center'
+        },
+        rawHtml: [
+          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg><br>You are about to make changes to a flow step that uses an archived email. This could result in sending emails that were meant to be archived.'
+        ]
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          style: "font-size: 12px;margin:20px;"
+        },
+        children: [
+          'Please type CONFIRM to proceed with the changes.'
+        ]
+      }),
+      jsCreateElement('input', {
+        attrs: {
+          type: 'text',
+          id: 'flowStepChangeValidate',
+          placeholder: 'Write CONFIRM to continue',
+          oninput: 'if(this.value == "CONFIRM"){dqs("#flowStepChangeButton").disabled = false;} else {dqs("#flowStepChangeButton").disabled = true;}',
+          class: 'mb20'
+        }
+      }),
+      jsCreateElement('div', {
+        children: [
+          jsCreateElement('button', {
+            attrs: {
+              id: 'flowStepChangeButton',
+              class: 'svg30 w100p',
+              onclick: 'confirmFlowStepChangeDo(' + flowStepID + ')',
+              disabled: true
+            },
+            rawHtml: [
+              '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg><div style="margin-left: 5px;">Confirm changes</div>'
+            ]
+          })
+        ]
+      }),
+      jsCreateElement('div', {
+        children: [
+          jsCreateElement('button', {
+            attrs: {
+              class: 'buttonIcon mt20',
+              onclick: 'cancelFlowStepChange()'
+            },
+            rawHtml: [
+              '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg><div style="margin-left: 5px;">Cancel</div>'
+            ]
+          })
+        ]
+      })
+    ]
+  });
+
+  // Store the callbacks for later execution
+  window._flowStepChangeCallback = onConfirm;
+  window._flowStepChangeCancelCallback = onCancel;
+
+  rawModalLoader(jsRender(html));
+  setTimeout(() => {
+    dqs("#flowStepChangeValidate").focus();
+    labelFloater();
+  }, 100);
+}
+
+function confirmFlowStepChangeDo(flowStepID) {
+  let validate = dqs("#flowStepChangeValidate").value;
+
+  if (validate !== "CONFIRM") {
+    rawModalError("Invalid confirmation");
+    return;
+  }
+
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Execute the stored callback to update the flow step
+  if (window._flowStepChangeCallback) {
+    window._flowStepChangeCallback();
+    window._flowStepChangeCallback = null;
+  }
+  window._flowStepChangeCancelCallback = null;
+}
+
+function cancelFlowStepChange() {
+  // Close the modal
+  dqs(".modalpop").remove();
+
+  // Execute the cancel callback to revert changes
+  if (window._flowStepChangeCancelCallback) {
+    window._flowStepChangeCancelCallback();
+    window._flowStepChangeCancelCallback = null;
+  }
+  window._flowStepChangeCallback = null;
+}
+
 // -- Update flow step
 function updateFlowStep(flowStepID) {
   let
@@ -714,6 +1094,7 @@ function updateFlowStep(flowStepID) {
 }
 
 
+let objTableStepStats = {};
 // -- Flow stats
 function openStepStats(stepID) {
   console.log("openStepStats", stepID);
@@ -736,7 +1117,7 @@ function openStepStats(stepID) {
 
   rawModalLoader(jsRender(html));
 
-  var objTableStepStats = new Tabulator("#stepStats_" + stepID, {
+  objTableStepStats[stepID] = new Tabulator("#stepStats_" + stepID, {
     height:"70vh",
     layout:"fitColumns",
     ajaxURL:"/api/flow_steps/stats/contacts?flowStepID=" + stepID,
@@ -745,15 +1126,17 @@ function openStepStats(stepID) {
       {title:"Status", field:"status", headerFilter:true, width:200},
       {title:"Contact", field:"user_email", headerFilter:true, width:200},
       {title:"Sent At", field:"sent_at", headerFilter:true, width:200},
-      {title:"Opened times", field:"open_count", headerFilter:true, width:200},
       {title:"Scheduled for", field:"scheduled_for", headerFilter:true, width:200},
     ],
   });
 
-  objTableStepStats.on("rowClick", function(e, row){
+  objTableStepStats[stepID].on("rowClick", function(e, row){
     loadContact(row.getData().user_id);
     dqs(".modalpop").remove();
   });
+
+  // Add CSV download context menu
+  addTabulatorContextMenu(objTableStepStats[stepID], "step_stats_" + stepID + ".csv");
 
 }
 
