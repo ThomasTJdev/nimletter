@@ -559,8 +559,23 @@ proc(request: Request) =
     mailData: seq[string]
     contactData: seq[string]
     listExists = false
+    mailCategory: string
 
   pg.withConnection conn:
+    # Check if email is archived before proceeding
+    mailCategory = getValue(conn, sqlSelect(
+        table   = "mails",
+        select  = [
+          "category"
+          ],
+        where   = [
+          "id = ?"
+        ]),
+      mailID)
+
+    if mailCategory == "archived":
+      resp Http400, "Cannot send mails that are archived. Change the mail status. (mail ID " & mailID & ")"
+
     mailData = getRow(conn, sqlSelect(
         table   = "mails",
         select  = [
@@ -611,7 +626,9 @@ proc(request: Request) =
     resp Http200, "Mail sent to " & email
 
   elif listExists:
-    createPendingEmailToAllListContacts(listID, mailID)
+    let (success, msg) = createPendingEmailToAllListContacts(listID, mailID)
+    if not success:
+      resp Http400, msg
 
     resp Http200, "Mail sent to listID: " & listID
 
