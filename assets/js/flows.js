@@ -288,6 +288,25 @@ async function buildFlowHTML(data) {
 
 
     //
+    // Determine border color based on mail status and sent count
+    let borderColor = '';
+    if (step.mail_id) {
+      // Check if mail is archived
+      let mail = (window._mailMap && window._mailMap[step.mail_id]) ||
+                (window._mailMap && window._mailMap[String(step.mail_id)]);
+      if (!mail && globalMailsData) {
+        mail = globalMailsData.find(m => m.id == step.mail_id || String(m.id) === String(step.mail_id));
+      }
+
+      if (mail && mail.category === 'archived') {
+        borderColor = 'var(--colorR250)';
+      } else if (step.sent_count > 0) {
+        borderColor = 'var(--colorG200)';
+      }
+    } else if (step.sent_count > 0) {
+      borderColor = 'var(--colorG200)';
+    }
+
     // Build step
     flowSteps.push(jsCreateElement('div', {
       attrs: {
@@ -304,7 +323,7 @@ async function buildFlowHTML(data) {
         jsCreateElement('div', {
           attrs: {
             class: 'stepInfo',
-            style: 'display: grid ; grid-template-columns: 1fr 150px; grid-gap: 20px; align-items: center;'
+            style: 'display: grid ; grid-template-columns: 1fr 150px; grid-gap: 20px; align-items: center;' + (borderColor ? ' border-color: ' + borderColor + ';' : '')
           },
           children: [
             jsCreateElement('div', {
