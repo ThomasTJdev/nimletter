@@ -74,13 +74,12 @@ async function addList() {
             children: [
               jsCreateElement('option', {
                 attrs: {
-                  value: 'true'
                 },
                 children: ['Yes']
               }),
               jsCreateElement('option', {
                 attrs: {
-                  value: 'false'
+                  selected: true
                 },
                 children: ['No']
               })
@@ -352,7 +351,7 @@ function openList(listID) {
             attrs: {
               class: 'itemBlock mb20'
             },
-            children: data.flow_id.map(flow => 
+            children: data.flow_id.map(flow =>
               jsCreateElement('div', {
                 attrs: {
                   class: 'flowItem',
@@ -384,6 +383,19 @@ function openList(listID) {
                 },
                 rawHtml: [
                   '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg><div style="margin-left: 5px;">Add flow</div>'
+                ]
+              })
+            ]
+          }),
+          jsCreateElement('div', {
+            children: [
+              jsCreateElement('button', {
+                attrs: {
+                  class: 'buttonIcon mb20',
+                  onclick: `addUsersToList(${listID})`
+                },
+                rawHtml: [
+                  '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.375 21c-2.331 0-4.512-.645-6.375-1.766Z" /></svg><div style="margin-left: 5px;">Add users</div>'
                 ]
               })
             ]
@@ -571,5 +583,123 @@ function addFlowToListDo() {
   .then(() => {
     dqs(".modalpop").remove();
     objTableLists.setData();
+  });
+}
+
+// -- Add users to list
+function addUsersToList(listID) {
+  const html = jsCreateElement('div', {
+    attrs: {
+      style: "width: 500px;"
+    },
+    children: [
+      jsCreateElement('div', {
+        attrs: {
+          class: 'headingH3 mb20 center'
+        },
+        children: ['Add users to list']
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          class: 'itemBlock mb20'
+        },
+        children: [
+          jsCreateElement('label', {
+            attrs: {
+              class: 'forinput active'
+            },
+            children: ['Paste users (email + name)']
+          }),
+          jsCreateElement('textarea', {
+            attrs: {
+              id: 'usersTextarea',
+              rows: '10',
+              placeholder: 'email@example.com\tJohn Doe\nanother@example.com\tJane Smith\n\nYou can paste tab-separated, comma-separated, or space-separated email and name pairs. One per line.',
+              style: 'width: 100%; padding: 10px; font-family: monospace; font-size: 12px;'
+            }
+          })
+        ]
+      }),
+      jsCreateElement('div', {
+        attrs: {
+          style: "font-size: 12px; margin: 0 20px 20px 20px; color: var(--colorN60);"
+        },
+        children: [
+          'Format: email and name separated by tab, comma, or space. One user per line. Example:\nemail@example.com\tJohn Doe\nor\nemail@example.com, John Doe\nor\nemail@example.com John Doe'
+        ]
+      }),
+      jsCreateElement('div', {
+        children: [
+          jsCreateElement('button', {
+            attrs: {
+              class: 'buttonIcon',
+              onclick: `addUsersToListDo(${listID})`
+            },
+            rawHtml: [
+              '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.375 21c-2.331 0-4.512-.645-6.375-1.766Z" /></svg><div style="margin-left: 5px;">Add users</div>'
+            ]
+          })
+        ]
+      })
+    ]
+  });
+  rawModalLoader(jsRender(html));
+  labelFloater();
+  setTimeout(() => {
+    dqs("#usersTextarea").focus();
+  }, 100);
+}
+
+function addUsersToListDo(listID) {
+  const textarea = dqs("#usersTextarea");
+  const text = textarea.value.trim();
+
+  if (text === "") {
+    rawModalError("Please paste some users to add.");
+    return;
+  }
+
+  // Disable button and show loading state
+  const button = textarea.closest('.modalpop').querySelector('button');
+  const originalHtml = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.25 18.002h9.192c-.26 1.141-.88 2.19-1.788 3.01M2.25 18.002a9.75 9.75 0 0 1 19.5 0M2.25 18.002v-3.75c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v3.75m-6 0v-3.75c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v3.75m-6 0h6" /></svg><div style="margin-left: 5px;">Adding users...</div>';
+
+  fetch("/api/lists/users/add", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      listID: listID,
+      users: text
+    })
+  })
+  .then(response => {
+    if (!response.ok) {
+      // Extract error message from response
+      return response.text().then(text => {
+        throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+      });
+    }
+    return response.json();
+  })
+  .then(data => {
+    dqs(".modalpop").remove();
+    if (data.success) {
+      let message = `Successfully added ${data.added || 0} user(s) to the list.`;
+      if (data.errors && data.errors.length > 0) {
+        message += `<br><br><strong>Errors (${data.errors.length}):</strong><br>${data.errors.map(e => '• ' + e).join('<br>')}`;
+      }
+      rawModalSuccess(message);
+      objTableLists.setData();
+    } else {
+      rawModalError(data.message || "Failed to add users");
+    }
+  })
+  .catch(error => {
+    button.disabled = false;
+    button.innerHTML = originalHtml;
+    rawModalError("Error adding users: " + (error.message || "Unknown error"));
   });
 }

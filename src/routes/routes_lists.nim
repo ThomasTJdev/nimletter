@@ -21,6 +21,7 @@ import
   ../database/database_connection,
   ../scheduling/schedule_mail,
   ../utils/auth,
+  ../utils/contacts_utils,
   ../utils/validate_data
 
 
@@ -372,6 +373,150 @@ proc(request: Request) =
       "data": bodyJson,
       "count": listsCount,
       "last_page": 1
+    }
+  )
+)
+
+
+listsRouter.post("/api/lists/users/add",
+proc(request: Request) =
+  createTFD()
+  if not c.loggedIn: resp Http401
+
+  var
+    listID: string
+    usersText: string
+    jsonBody: JsonNode
+
+  try:
+    jsonBody = parseJson(request.body)
+    # Handle listID as either string or number
+    let listIDNode = jsonBody.getOrDefault("listID")
+    if listIDNode.kind == JString:
+      listID = listIDNode.getStr().strip()
+    elif listIDNode.kind == JInt:
+      listID = $listIDNode.getInt()
+    else:
+      resp Http400, "Invalid list ID format"
+
+    usersText = jsonBody.getOrDefault("users").getStr()
+  except:
+    resp Http400, "Invalid JSON"
+
+  if not listID.isValidInt():
+    resp Http400, "Invalid list ID"
+
+  if usersText.strip() == "":
+    resp Http400, "No users provided"
+
+  #
+  # Parse users from text - support tab, comma, or space separated
+  #
+  var users: seq[tuple[email: string, name: string]] = @[]
+  var errors: seq[string] = @[]
+  var added: int = 0
+
+  for line in usersText.splitLines():
+    let trimmed = line.strip()
+    if trimmed == "":
+      continue
+
+    var email, name: string
+    var found = false
+
+    # Try tab-separated first
+    if '\t' in trimmed:
+      let parts = trimmed.split('\t', maxsplit = 1)
+      if parts.len() >= 2:
+        email = parts[0].strip()
+        name = parts[1].strip()
+        found = true
+    # Try comma-separated
+    elif ',' in trimmed:
+      let parts = trimmed.split(',', maxsplit = 1)
+      if parts.len() >= 2:
+        email = parts[0].strip()
+        name = parts[1].strip()
+        found = true
+    # Try space-separated (last resort)
+    else:
+      let parts = trimmed.splitWhitespace(maxsplit = 1)
+      if parts.len() >= 2:
+        email = parts[0].strip()
+        name = parts[1].strip()
+        found = true
+
+    if not found:
+      errors.add("Invalid format: " & trimmed)
+      continue
+
+    email = email.toLowerAscii().strip()
+    name = name.strip()
+
+    if email == "" or not email.isValidEmail():
+      errors.add("Invalid email: " & email)
+      continue
+
+    if name == "":
+      errors.add("Missing name for: " & email)
+      continue
+
+    if name.len() > 255:
+      errors.add("Name too long for: " & email)
+      continue
+
+    users.add((email: email, name: name))
+
+  if users.len() == 0:
+    resp Http400, "No valid users found"
+
+  #
+  # Add users to list
+  #
+  pg.withConnection conn:
+    for user in users:
+      var userID: string
+
+      # Check if contact exists
+      userID = getValue(conn, sqlSelect(
+          table = "contacts",
+          select = ["id"],
+          where = ["email = ?"]
+        ), user.email)
+
+      # Create contact if it doesn't exist
+      if userID == "":
+        let meta = createMetaWithCountry(request.ip)
+        userID = $insertID(conn, sqlInsert(
+            table = "contacts",
+            data  = [
+              "email",
+              "name",
+              "requires_double_opt_in",
+              "meta",
+            ]),
+            user.email,
+            user.name,
+            "false",
+            meta
+          )
+
+      # Add to list (if not already on list)
+      if not isContactOnList(userID, listID):
+        if addContactToList(userID, listID):
+          added += 1
+        else:
+          errors.add("Failed to add " & user.email & " to list")
+      else:
+        # User already on list, but we'll count it as success
+        added += 1
+
+  resp Http200, (
+    %* {
+      "success": true,
+      "added": added,
+      "total": users.len(),
+      "errors": errors
     }
   )
 )
