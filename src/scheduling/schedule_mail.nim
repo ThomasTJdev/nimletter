@@ -160,7 +160,19 @@ proc createPendingEmailFromFlowstep*(userID, listID, flowID: string, stepNumber:
   )
 
 
-proc createPendingEmailToAllListContacts*(listID, mailID: string) =
+proc createPendingEmailToAllListContacts*(listID, mailID: string): tuple[success: bool, msg: string] =
+
+  # Check if the email is archived before creating pending emails
+  pg.withConnection conn:
+    let mailCategory = getValue(conn, sqlSelect(
+      table = "mails",
+      select = ["category"],
+      where = ["id = ?"]
+    ), mailID)
+
+    if mailCategory == "archived":
+      echo "Email with mailID " & mailID & " is archived - skipping creation of pending emails"
+      return (false, "Email with mailID " & mailID & " is archived - skipping creation of pending emails")
 
   var contacts: seq[seq[string]]
   pg.withConnection conn:
@@ -199,3 +211,4 @@ proc createPendingEmailToAllListContacts*(listID, mailID: string) =
       triggerType = "immediate",
       status = "pending"
     )
+  return (true, "Pending emails created for all contacts on list " & listID)

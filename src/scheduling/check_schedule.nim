@@ -49,7 +49,11 @@ proc checkAndSendScheduledEmails*(minutesBack = 5, until = now().utc, isBackupRu
           "pending_emails.uuid",
           "pending_emails.mail_id",
           "pending_emails.manual_html",
-          "pending_emails.manual_subject"
+          "pending_emails.manual_subject",
+          "COALESCE(mails.category, '') as mail_category"
+        ],
+        joinargs = [
+          (table: "mails", tableAs: "", on: @["pending_emails.mail_id = mails.id"])
         ],
         where = [
           "pending_emails.scheduled_for <= ?",
@@ -93,6 +97,7 @@ proc checkAndSendScheduledEmails*(minutesBack = 5, until = now().utc, isBackupRu
       uuid: pendingEmail[11],
       mailID: pendingEmail[12],
       manualHTML: pendingEmail[13],
-      manualSubject: pendingEmail[14]
+      manualSubject: pendingEmail[14],
+      mailCategory: pendingEmail[15]
     )
 

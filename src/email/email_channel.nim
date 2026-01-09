@@ -33,6 +33,7 @@ type
     mailID*: string
     manualHTML*: string
     manualSubject*: string
+    mailCategory*: string  # Category of the mail (e.g., "archived") - populated when fetching pending emails
 
 var
   mailChannel*: Channel[PendingMailObj]
@@ -81,10 +82,37 @@ proc sendPendingEmail(pendingEmail: PendingMailObj) =
 
   let userData = getUserData(pendingEmail.userID)
 
+  # Check if the email is archived before attempting to send
+  if pendingEmail.mailCategory == "archived":
+    echo "Email with mailID " & pendingEmail.mailID & " is archived - skipping send"
+
+    # Update the status of the pending email to 'skipped'
+    pg.withConnection conn:
+      exec(conn, sqlUpdate(
+        table = "pending_emails",
+        data  = [
+          "status",
+          "updated_at"
+        ],
+        where = [
+          "id = ?"
+        ]),
+        "skipped",
+        $(now().utc).format("yyyy-MM-dd HH:mm:ss"),
+        pendingEmail.id
+      )
+
+    # Schedule the next flow step if applicable (even though we skipped this email)
+    if pendingEmail.flowStepID != "":
+      echo "Email was archived, but continuing to next flow step"
+      scheduleNextFlowStep(pendingEmail, getMailData(pendingEmail.flowStepID))
+
+    return
+
   var mailData: seq[string]
   if pendingEmail.manualHTML != "":
+    # Manual HTML emails don't have a mailID, so they can't be archived
     mailData = @[pendingEmail.manualSubject, pendingEmail.manualHTML]
-
   else:
     pg.withConnection conn:
       mailData = getRow(conn, sqlSelect(
