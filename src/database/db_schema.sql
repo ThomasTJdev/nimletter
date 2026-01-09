@@ -76,7 +76,10 @@ CREATE TABLE IF NOT EXISTS contacts (
   bounced_at          TIMESTAMP, -- Timestamp when the email bounced
   complained_at       TIMESTAMP, -- Timestamp when the email was marked as spam
   meta                JSONB,          -- Additional metadata for the user
-  uuid                UUID NOT NULL DEFAULT uuid_generate_v4()
+  uuid                UUID NOT NULL DEFAULT uuid_generate_v4(),
+  has_unsubscribed    BOOLEAN DEFAULT FALSE, -- Flag to check if the contact has unsubscribed
+  unsubscribed_at     TIMESTAMP, -- Timestamp when the contact unsubscribed
+  unscribed_from_lists TEXT -- Lists the contact was unsubscribed from
 );
 
 -- Table for subscriptions (contacts signing up for lists)
@@ -243,3 +246,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_email_clicks_user_id ON email_clicks
 ALTER TABLE flows ADD COLUMN IF NOT EXISTS is_deleted TIMESTAMP DEFAULT NULL;
 ALTER TABLE lists ADD COLUMN IF NOT EXISTS is_deleted TIMESTAMP DEFAULT NULL;
 ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS smtp_use_aws_ses BOOLEAN DEFAULT FALSE;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS has_unsubscribed BOOLEAN DEFAULT FALSE;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS unscribed_from_lists TEXT;

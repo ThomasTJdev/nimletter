@@ -157,6 +157,12 @@ function tableContacts() {
       {title:"Emails Sent", field:"emails_count_sent", hozAlign:"center", width: 140, headerFilter:true},
       {title:"Emails Pending", field:"emails_count_pending", hozAlign:"center", width: 140, headerFilter:true},
 
+      {title:"Has Unsubscribed", field:"has_unsubscribed", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
+        return cell.getValue() ? "Yes" : "No";
+      }},
+      {title:"Unsubscribed At", field:"unsubscribed_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
+      {title:"Unscribed From Lists", field:"unscribed_from_lists", hozAlign:"left", width: 140, headerFilter:true},
+
       {title:"Bounced At", field:"bounced_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
       {title:"Complained At", field:"complained_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
       {title:"Created At", field:"created_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},

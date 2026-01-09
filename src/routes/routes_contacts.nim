@@ -341,7 +341,10 @@ proc(request: Request) =
         "contacts.updated_at",
         "contacts.meta",
         "contacts.status",
-        "contacts.pending_lists"
+        "contacts.pending_lists",
+        "contacts.has_unsubscribed",
+        "contacts.unsubscribed_at",
+        "contacts.unscribed_from_lists"
       ],
       where = ["contacts.id = ?"],
       customSQL = "ORDER BY contacts.created_at"
@@ -429,6 +432,9 @@ proc(request: Request) =
     "status": contact[12],
     "pending_lists": pendingListsJson,
     "subscriptions": subscriptionsJson,
+    "has_unsubscribed": (contact[13] == "t"),
+    "unsubscribed_at": contact[14],
+    "unscribed_from_lists": contact[15],
   })
 
   resp Http200, (
@@ -680,7 +686,10 @@ proc(request: Request) =
         "(SELECT COUNT(*) FROM email_clicks WHERE email_clicks.user_id = contacts.id) AS email_clicks_count",
         "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
         "contacts.meta->>'country' AS country",
-        "CASE WHEN COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') = 0 THEN 0 ELSE (SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) * 100 / COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') END AS opening_rate"
+        "CASE WHEN COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') = 0 THEN 0 ELSE (SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) * 100 / COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') END AS opening_rate",
+        "contacts.has_unsubscribed",
+        "contacts.unsubscribed_at",
+        "contacts.unscribed_from_lists"
       ],
       joinargs = [
         (table: "pending_emails", tableAs: "", on: @["contacts.id = pending_emails.user_id"])
@@ -719,6 +728,9 @@ proc(request: Request) =
       "subscribed_lists": contact[16],
       "country": contact[17],
       "opening_rate": contact[18].parseInt(),
+      "has_unsubscribed": (contact[19] == "t"),
+      "unsubscribed_at": contact[20].split(".")[0],
+      "unscribed_from_lists": contact[21],
     })
 
   resp Http200, (

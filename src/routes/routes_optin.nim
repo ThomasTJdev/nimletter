@@ -267,6 +267,17 @@ proc(request: Request) =
   if userData[0] == "":
     resp Http200, nimfOptinUnubscribe("", "", "", unsubscribeFromAll)
 
+  pg.withConnection conn:
+    exec(conn, sqlUpdate(
+      table = "contacts",
+      data  = [
+        "has_unsubscribed",
+        "unsubscribed_at",
+        "unscribed_from_lists"
+      ],
+      where = ["uuid = ?"]
+      ), "true", $(now().utc).format("yyyy-MM-dd HH:mm:ss"), listIdentifiers.join(","), userUUID)
+
   let data = %* {
       "success": true,
       "id": userData[0],
@@ -277,7 +288,7 @@ proc(request: Request) =
       "event": "contact_optedin"
     }
 
-  parseWebhookEvent(contact_optedin, data)
+  parseWebhookEvent(contact_unsubscribed, data)
 
   resp Http200, nimfOptinUnubscribe(userUUID, userData[1], userData[2], unsubscribeFromAll)
 )
