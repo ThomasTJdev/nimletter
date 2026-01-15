@@ -6,21 +6,21 @@ Nimletter is built to replace the simple functionalities found in Mailchimp, Mai
 
 ![Nimletter Logo](assets/images/nimletter.png)
 
-## ✨ Features
+## Features
 
-- 🚀 **BYO SMTP server or use AWS SES**
-- 📊 **Open and click tracking integrated without setup**
-- 📊 **Bounce, complaint tracking with AWS or other callback**
-- 🖱️ **Drag and Drop email builder**
-- 📝 **Variables / Attributes in mails**
-- 📆 **Drip campaigns**
-- 📧 **Transactional emails**
-- ✅ **Subscribe and double opt-in**
-- 🔗 **Webhook for Zapier, etc.**
-- 🔌 **API with simple endpoints**
-- 🔐 **Yubikey OTP security**
-- 🎨 **Customizable templates**
-- ⚙️ **Customizable settings**
+- **BYO SMTP server or use AWS SES**
+- **Open and click tracking integrated without setup**
+- **Bounce, complaint tracking with AWS or other callback**
+- **Drag and Drop email builder**
+- **Variables / Attributes in mails**
+- **Drip campaigns**
+- **Transactional emails**
+- **Subscribe and double opt-in**
+- **Webhook for Zapier, etc.**
+- **API with simple endpoints**
+- **Yubikey OTP security**
+- **Customizable templates**
+- **Customizable settings**
 
 ## Flow Concepts
 
@@ -61,12 +61,12 @@ Using the mail-callback, flows can be managed based on user actions. If a user c
 
 I needed a simple system to design and send out my newsletter, but also sending drip campaigns with tips and tricks when new users signed up. Besides those two core features, I also needed to keep track of bounces and complaints to maintain my domain reputation.
 
-That was doable with the big players, but I wanted to have full control over the system and the user data (GDPR and syncing to my SaaS). So I ended up with something like Mailerlite for campaigns and Google templates for newsletters.
+That was doable with the big players, but I wanted to have full control over the system and the user data (GDPR and syncing to my SaaS). So I ended up with something like Mailerlite for campaigns and Google templates for newsletters. That was not a nice and scalable solution for me.
 
 
 ## ✨ Building Emails
 
-Unleash your creativity with the drag-and-drop email builder, powered by EmailbuilderJS! Create templates and personalize your emails effortlessly. Nimletter supports a variety of variables to make each email unique and engaging.
+Drag-and-drop email builder, powered by EmailbuilderJS. Create templates and personalize your emails effortlessly. Nimletter supports a variety of variables to make each email unique and engaging.
 
 ### Available Variables
 You can use the following variables in your emails:
@@ -83,11 +83,9 @@ You can use the following variables in your emails:
 Each variable supports default values, so you can write `{{ firstname | "there" }}` to ensure a friendly fallback.
 
 ### User-Specific Attributes
-Enhance personalization by using user-specific attributes. For example, if you collect the user's country during opt-in, you can use `{{ country }}` in your emails. Add any additional attributes to the user, and they become available for use in your email content.
+Customize user-specific attributes. For example, if you collect the user's country during opt-in, you can use `{{ country }}` in your emails. Add any additional attributes to the user, and they become available for use in your email content.
 
 ## 🗂️ Structure of Lists, Flows, and Emails
-
-Visualize the structure of your lists, flows, and emails with our intuitive diagram:
 
 ![Structure](assets/screenshots/nimletter_base.drawio.svg)
 
@@ -272,19 +270,37 @@ curl -X POST \
 ## Start the database
 Create the database for starters (this for an new postgresql instance, otherwise use another username and password):
 ```sh
-psql -U postgres -c "CREATE USER postgres WITH PASSWORD 'postgres';"
-psql -U postgres -c "CREATE DATABASE nimletter_db OWNER postgres;"
-psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE nimletter_db TO postgres;"
+podman pull docker.io/postgres:17.2-alpine
+podman run --name postgres -d --network host -v postgres_data:/var/lib/postgresql/data docker.io/postgres:17.2-alpine
+podman exec -it postgres psql -U postgres -c "CREATE USER postgres WITH PASSWORD 'postgres';"
+podman exec -it postgres psql -U postgres -c "CREATE DATABASE nimletter_db OWNER postgres;"
+podman exec -it postgres psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE nimletter_db TO postgres;"
 ```
 
-### Option A) Docker / Podman compose
+## Start the Nimletter container
+
+_I prefer option A_
+
+### Option A) Systemd service file
+```sh
+cp postgres.service ~/.config/systemd/user/
+# (the same as below)
+cp nimletter.service ~/.config/systemd/user/
+podman pull ghcr.io/thomastjdev/nimletter:latest
+systemctl --user daemon-reload
+systemctl --user start nimletter
+systemctl --user status nimletter
+systemctl --user enable nimletter
+```
+
+### Option B) Docker / Podman compose
 ```sh
 docker compose -f nimletter-compose.yaml up --detach
 # or
 podman compose -f nimletter-compose.yaml up --detach
 ```
 
-### Option B) Run the container
+### Option C) Run the container
 __(Only database setup is needed)__
 ```sh
 podman run \
@@ -307,7 +323,7 @@ podman run \
   ghcr.io/thomastjdev/nimletter:latest
 ```
 
-### Option C) Compile and run
+### Option D) Compile and run
 __(See environment setup below for configuration)__
 ```sh
 git clone
@@ -316,18 +332,6 @@ nim c -d:release nimletter
 # First run creates the database and inserts test data
 ./nimletter --DEV_RESET
 ./nimletter
-```
-
-### Option D) Systemd service file
-```sh
-cp postgres.service ~/.config/systemd/user/
-# (the same as below)
-cp nimletter.service ~/.config/systemd/user/
-podman pull ghcr.io/thomastjdev/nimletter:latest
-systemctl --user daemon-reload
-systemctl --user start nimletter
-systemctl --user status nimletter
-systemctl --user enable nimletter
 ```
 
 ## Default credentials
@@ -350,6 +354,18 @@ And within the system, you can customize the username and password. The password
 
 Nimletter is optimized for AWS SES but can be used with any SMTP server. The core part for managing bounces, complaints, and deliveries is done by the webhook endpoint. The formats can be seen in the `tests` folder.
 
+## SMTP Configuration
+
+Specify as environment variable or within the system. Within the system will save it to the database.
+
+If the `SMTP_HOST` is specified as an environment variable, then it won't use the saved values in the database.
+
+## AWS SES Endpoint
+
+If you are a heavy sender then you might want to use the AWS SES endpoint instead of the SMTP server. This is more efficient and scalable. In the SMTP settings in the system, you can enable "Use AWS SES" and then insert AWS AKIA-credentials with access to SendRawEmail.
+
+
+# 📧 AWS SES - Open, Click, Bounce, Complaint, Delivery tracking
 If you are using AWS, just set up an SMTP Configuration, add relevant events, attach to an SNS topic, and point the webhook to the Nimletter endpoint.
 
 __(The SNS_WEBHOOK_SECRET can also be set inside the settings page)__
@@ -357,7 +373,7 @@ __(The SNS_WEBHOOK_SECRET can also be set inside the settings page)__
 /webhook/incoming/sns/" & getEnv("SNS_WEBHOOK_SECRET", "secret")
 ```
 
-If the `SMTP_HOST` is specified as an environment variable, then it won't use the saved values in the database.
+See the @README_AWS_SES.md file for more information.
 
 # 🌐 Environment variables
 The values are customizable within the system and will be saved to the database.
