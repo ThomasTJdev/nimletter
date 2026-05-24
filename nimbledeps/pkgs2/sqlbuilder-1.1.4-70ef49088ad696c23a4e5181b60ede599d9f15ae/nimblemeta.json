@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "metaData": {
+    "url": "https://github.com/ThomasTJdev/nim_sqlbuilder",
+    "downloadMethod": "git",
+    "vcsRevision": "653ef304d7d68e7ef624bfe1bfdb3a4b079258c7",
+    "files": [
+      "/sqlbuilder.nimble",
+      "/sqlbuilderpkg/utils_private.nim",
+      "/sqlbuilder.nim",
+      "/sqlbuilderpkg/update.nim",
+      "/sqlbuilderpkg/query_calls.nim",
+      "/sqlbuilder_include.nim",
+      "/sqlbuilderpkg/insert.nim",
+      "/sqlbuilderpkg/totypes.nim",
+      "/sqlbuilderpkg/select_legacy.nim",
+      "/sqlbuilderpkg/select.nim",
+      "/sqlbuilderpkg/utils.nim",
+      "/sqlbuilderpkg/delete.nim",
+      "/config.nims"
+    ],
+    "binaries": [],
+    "specialVersions": [
+      "1.1.4"
+    ]
+  }
+}

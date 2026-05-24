@@ -5,12 +5,12 @@
     "downloadMethod": "git",
     "vcsRevision": "9b86daab0c4c3843e288e565f79dcfb8e330c4c0",
     "files": [
-      "/mummy/multipart.nim",
-      "/mummy/fileloggers.nim",
-      "/mummy/routers.nim",
       "/mummy.nim",
       "/mummy.nimble",
+      "/mummy/multipart.nim",
+      "/mummy/routers.nim",
       "/mummy/common.nim",
+      "/mummy/fileloggers.nim",
       "/mummy/internal.nim"
     ],
     "binaries": [],

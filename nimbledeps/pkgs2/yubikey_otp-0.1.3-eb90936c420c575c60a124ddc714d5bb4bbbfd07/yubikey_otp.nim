@@ -63,7 +63,12 @@ proc yubikeyOTPValidate*(
 
   # Make request
   client.headers = newHttpHeaders({ "User-Agent": "Nim Yubikey Client" })
-  let response = client.request(url)
+  var response: Response
+  try:
+    response = client.request(url)
+  finally:
+    client.close()
+
   when defined(dev):
     echo url
     echo response.body

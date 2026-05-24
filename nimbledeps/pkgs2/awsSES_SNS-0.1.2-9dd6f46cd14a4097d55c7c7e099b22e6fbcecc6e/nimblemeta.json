@@ -3,16 +3,16 @@
   "metaData": {
     "url": "https://github.com/ThomasTJdev/nim_awsSES_SNS",
     "downloadMethod": "git",
-    "vcsRevision": "e2b2d6517055155d8ca52696df509b0d50d0a5bd",
+    "vcsRevision": "989ceaa1271841141329dc4390c9497d0735f249",
     "files": [
-      "/awsSES_SNS.nim",
       "/awsSES_SNS/smtp_ses.nim",
-      "/awsSES_SNS/parser_sns.nim",
-      "/awsSES_SNS.nimble"
+      "/awsSES_SNS.nimble",
+      "/awsSES_SNS.nim",
+      "/awsSES_SNS/parser_sns.nim"
     ],
     "binaries": [],
     "specialVersions": [
-      "0.1.1"
+      "0.1.2"
     ]
   }
 }

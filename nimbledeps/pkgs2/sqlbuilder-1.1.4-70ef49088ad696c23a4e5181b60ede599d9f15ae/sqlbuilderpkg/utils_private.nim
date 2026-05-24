@@ -74,7 +74,7 @@ proc formatWhereParams*(v: string): string =
   #
   # Does the data have a `=` sign?
   #
-  if fieldSplit.len() == 2:
+  if fieldSplit.len() >= 2:
     #
     # If the data is only having equal but no value, insert a `?` sign
     #
