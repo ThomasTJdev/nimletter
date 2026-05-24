@@ -2,10 +2,10 @@
 #
 #
 #
-#proc nimfMain(c: UserData, page = ""): string =
+#proc nimfMain(c: UserData, page = "", pageName: string): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>${pageName}</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>
@@ -35,9 +35,9 @@
   </head>
   <body class="mainbody ${page}">
     <main>
-      ${nimfSidebar(c)}
+      ${nimfSidebar(c, pageName)}
       <div class="content">
-        <h1 id="heading">Nimletter, drip it!</h1>
+        <h1 id="heading">${pageName}</h1>
         <p id="infotext" style="max-width: 600px;"></p>
         <div id="work">
         </div>
@@ -49,10 +49,10 @@
 #
 #
 #
-#proc nimfEvent(c: UserData, page = ""): string =
+#proc nimfEvent(c: UserData, page = "", pageName: string): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>${pageName}</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>
@@ -75,7 +75,7 @@
   </head>
   <body class="mainbody ${page}">
     <main>
-      ${nimfSidebar(c)}
+      ${nimfSidebar(c, pageName)}
       <div class="content">
         <h1 id="heading">Events</h1>
         <div id="work">

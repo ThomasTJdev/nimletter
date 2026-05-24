@@ -5,7 +5,7 @@
 #proc nimfLogin(): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>Sign in</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>
@@ -19,10 +19,7 @@
   <body class="mainbody">
     <main>
       <div class="content notLoggedIn">
-        <h1 id="heading" class="center">Nimletter, drip it!</h1>
-        <div class="mb30" style="display: flex;">
-          <img src="/assets/images/nimletter.png" style="width: 300px;margin: auto;">
-        </div>
+        <h1 id="heading" class="center">Sign in</h1>
         <div id="work">
         </div>
       </div>

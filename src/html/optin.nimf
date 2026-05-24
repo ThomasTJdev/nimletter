@@ -87,7 +87,7 @@
 #proc nimfOptinSubscribeOptin(userUUID: string): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>Subscription confirmed</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>
@@ -119,7 +119,7 @@
 #proc nimfOptinUnubscribe(userUUID, name, email: string, unsubscribeFromAll: bool = false): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>Unsubscribed</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>

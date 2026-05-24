@@ -22,6 +22,7 @@ import
   ../database/database_connection,
   ../utils/auth,
   ../utils/password_utils,
+  ../utils/settings_utils,
   ../utils/validate_data
 
 include
@@ -29,6 +30,13 @@ include
   "../html/dash.nimf",
   "../html/login.nimf",
   "../html/profile.nimf"
+
+
+proc renderMain*(c: UserData; page = ""): string =
+  nimfMain(c, page, getPageName())
+
+proc renderEvent*(c: UserData): string =
+  nimfEvent(c, "", getPageName())
 
 
 var mainRouter*: Router
@@ -139,7 +147,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c, "dashboard")
+  resp Http200, renderMain(c, "dashboard")
 )
 
 mainRouter.get("/contacts",
@@ -147,7 +155,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/lists",
@@ -155,7 +163,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/mails",
@@ -163,7 +171,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/flows",
@@ -171,7 +179,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/maillog",
@@ -179,7 +187,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/settings",
@@ -187,7 +195,7 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfMain(c)
+  resp Http200, renderMain(c)
 )
 
 mainRouter.get("/events",
@@ -195,6 +203,6 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/login")
 
-  resp Http200, nimfEvent(c)
+  resp Http200, renderEvent(c)
 )
 

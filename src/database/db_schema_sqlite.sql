@@ -154,7 +154,8 @@ CREATE TABLE IF NOT EXISTS settings (
   page_name           TEXT NOT NULL,
   hostname            TEXT NOT NULL,
   optin_email         INTEGER NOT NULL REFERENCES mails(id),
-  logo_url            TEXT
+  logo_url            TEXT,
+  link_success        TEXT
 );
 
 INSERT INTO settings (page_name, hostname, optin_email) VALUES ('nimletter', 'https://nimletter.com', 1);

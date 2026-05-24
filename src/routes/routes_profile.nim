@@ -23,6 +23,7 @@ import
   ../database/database_connection,
   ../utils/auth,
   ../utils/password_utils,
+  ../utils/settings_utils,
   ../utils/validate_data
 
 
@@ -37,7 +38,7 @@ profileRouter.get("/profile",
 proc(request: Request) =
   createTFD()
   if not c.loggedIn: redirect("/")
-  resp Http200, nimfProfile(c)
+  resp Http200, nimfProfile(c, getPageName())
 )
 
 

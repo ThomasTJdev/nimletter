@@ -36,25 +36,29 @@ proc(request: Request) =
   createTFD()
   if not c.loggedIn: resp Http401
 
-  var mainSettings: seq[string]
+  var
+    mainSettings: seq[string]
+    optinEmailName = ""
   pg.withConnection conn:
     mainSettings = getRow(conn, sqlSelect(
       table = "settings",
       select = [
-        "settings.page_name",
-        "settings.hostname",
-        "settings.logo_url",
-        "settings.optin_email",
-        "settings.link_success",
-        "mails.name"
-      ],
-      joinargs = [
-        (table: "mails", tableAs: "", on: @["mails.id = settings.optin_email"]),
+        "page_name",
+        "hostname",
+        "logo_url",
+        "optin_email",
+        "link_success",
       ],
       where = [
-        "settings.id = 1"
+        "id = 1"
       ]
     ))
+    if mainSettings.len > 3 and mainSettings[3].strip() != "":
+      optinEmailName = getValue(conn, sqlSelect(
+        table = "mails",
+        select = ["name"],
+        where = ["id = ?"]
+      ), mainSettings[3])
 
 
   resp Http200, (
@@ -64,7 +68,7 @@ proc(request: Request) =
       { "key": "logoUrl", "name": "Logo URL", "value": mainSettings[2] },
       { "key": "optinEmailID", "name": "Optin Email ID", "value": mainSettings[3] },
       { "key": "linkSuccess", "name": "Link Success", "value": mainSettings[4] },
-      { "key": "optinEmailName", "name": "Optin Email Name", "value": mainSettings[5] }
+      { "key": "optinEmailName", "name": "Optin Email Name", "value": optinEmailName }
     ]
   )
 )

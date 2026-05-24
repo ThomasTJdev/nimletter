@@ -2,10 +2,10 @@
 #
 #
 #
-#proc nimfProfile(c: UserData): string =
+#proc nimfProfile(c: UserData, pageName: string): string =
 <html>
   <head>
-    <title>Nimletter</title>
+    <title>${pageName}</title>
     <link rel="icon" type="image/x-icon" href="/assets/favicon/favicon.ico">
 
     <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/roboto-v47-latin-300.woff2" crossorigin/>
@@ -18,9 +18,9 @@
   </head>
   <body class="mainbody">
     <main>
-      ${nimfSidebar(c)}
+      ${nimfSidebar(c, pageName)}
       <div class="content">
-        <h1 id="heading">Nimletter, drip it!</h1>
+        <h1 id="heading">${pageName}</h1>
         <div id="work">
         </div>
       </div>
