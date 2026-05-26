@@ -223,6 +223,10 @@ proc(request: Request) =
     # First get user info
     userData = getRow(conn, sqlSelect(table = "contacts", select = ["id", "name", "email"], where = ["uuid = ?"]), userUUID)
 
+    # Guard early: unknown UUID means there is nothing to unsubscribe from
+    if userData[0] == "":
+      resp Http200, nimfOptinUnubscribe("", "", "", unsubscribeFromAll)
+
     if not unsubscribeFromAll:
       # Now get listID from latest email from pending_emails
       let lastEmailListID = getValue(conn, sqlSelect(table = "pending_emails", select = ["list_id"], where = ["user_id = ?"], customSQL = "ORDER BY created_at DESC LIMIT 1"), userData[0])
@@ -263,9 +267,6 @@ proc(request: Request) =
         for listId in listData:
           listUUIDs.add(listId[0])
           listIdentifiers.add(listId[1])
-
-  if userData[0] == "":
-    resp Http200, nimfOptinUnubscribe("", "", "", unsubscribeFromAll)
 
   pg.withConnection conn:
     exec(conn, sqlUpdate(

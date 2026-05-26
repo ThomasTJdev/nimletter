@@ -96,6 +96,7 @@ function tableContacts() {
         rowRange:"active"
       }, hozAlign:"center", headerSort:false},
       {title:"ID", field:"id", width:50, headerFilter:true},
+      {title:"UUID", field:"uuid", width:300, headerFilter:true},
       {title:"Email", field:"email", width:250, headerFilter:true, cssClass:"semibold"},
       {title:"Name", field:"name", width:200, headerFilter:true},
       {title:"Status", field:"status", width:100, headerFilter:true},

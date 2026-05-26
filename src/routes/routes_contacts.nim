@@ -389,7 +389,7 @@ proc(request: Request) =
         ), contact[13])
 
 
-  if contact.len == 0:
+  if contact[0] == "":
     resp Http404, "User not found"
 
   #
@@ -423,18 +423,21 @@ proc(request: Request) =
     "name": contact[3],
     "requires_double_opt_in": (contact[4] == "t"),
     "double_opt_in": (contact[5] == "t"),
-    "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: parseJson("[]")),
+    # contact[6] = double_opt_in_data (JSONB), contact[11] = meta (JSONB) — guard
+    # against stored values that are non-empty but structurally invalid JSON
+    "double_opt_in_data": (try: (if contact[6] != "": parseJson(contact[6]) else: parseJson("[]")) except: parseJson("[]")),
     "bounced_at": contact[7],
     "complained_at": contact[8],
     "created_at": contact[9],
     "updated_at": contact[10],
-    "meta": (if contact[11] != "": parseJson(contact[11]) else: parseJson("{}")),
+    "meta": (try: (if contact[11] != "": parseJson(contact[11]) else: parseJson("{}")) except: parseJson("{}")),
     "status": contact[12],
+    # contact[13] = pending_lists (used above for the pendingList query)
     "pending_lists": pendingListsJson,
     "subscriptions": subscriptionsJson,
-    "has_unsubscribed": (contact[13] == "t"),
-    "unsubscribed_at": contact[14],
-    "unscribed_from_lists": contact[15],
+    "has_unsubscribed": (contact[14] == "t"),
+    "unsubscribed_at": contact[15],
+    "unscribed_from_lists": contact[16],
   })
 
   resp Http200, (

@@ -178,9 +178,10 @@ proc(request: Request) =
 
   var respData = parseJson("[]")
   for row in data:
-    let sentCount = row[5].parseInt()
-    let openCount = row[7].parseInt()
-    let openingRate = toInt(if sentCount > 0: (openCount.float / sentCount.float) * 100 else: 0.0)
+    let sentCount    = (if row[5] == "": 0 else: row[5].parseInt())
+    let pendingCount = (if row[6] == "": 0 else: row[6].parseInt())
+    let openCount    = (if row[7] == "": 0 else: row[7].parseInt())
+    let openingRate  = toInt(if sentCount > 0: (openCount.float / sentCount.float) * 100 else: 0.0)
 
     respData.add(
       %* {
@@ -190,7 +191,7 @@ proc(request: Request) =
         "created_at": row[3],
         "updated_at": row[4],
         "sent_count": sentCount,
-        "pending_count": row[6].parseInt(),
+        "pending_count": pendingCount,
         "opening_rate": openingRate
       }
     )
@@ -454,11 +455,16 @@ proc(request: Request) =
     newStepNumber = @"newStepNumber".parseInt()
 
   pg.withConnection conn:
-    let oldStepNumber = getValue(conn, sqlSelect(
+    let oldStepNumberStr = getValue(conn, sqlSelect(
         table  = "flow_steps",
         select = ["step_number"],
         where  = ["id = ?"]
-      ), flowStepID).parseInt()
+      ), flowStepID)
+
+    if oldStepNumberStr == "":
+      resp Http404, "Flow step not found"
+
+    let oldStepNumber = oldStepNumberStr.parseInt()
 
     let flowID = getValue(conn, sqlSelect(
         table  = "flow_steps",
@@ -674,8 +680,8 @@ proc(request: Request) =
         "created_at": row[8],
         "updated_at": row[9],
         "mail_name": row[10],
-        "pending_count": row[11].parseInt(),
-        "sent_count": row[12].parseInt(),
+        "pending_count": (if row[11] == "": 0 else: row[11].parseInt()),
+        "sent_count": (if row[12] == "": 0 else: row[12].parseInt()),
         "scheduled_time": row[13]
       }
     )
