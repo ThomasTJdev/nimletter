@@ -39,6 +39,9 @@ proc updateUserBounce(mail: MailBounce) =
   pg.withConnection conn:
     mailData = getDataFromPendingEmails(conn, mail.messageID)
 
+    if mailData.id == "":
+      return
+
     exec(conn, sqlUpdate(
       table = "contacts",
       data  = [
@@ -100,6 +103,10 @@ proc updateUserComplaint(mail: MailComplaint) =
   var mailData: PendingMail
   pg.withConnection conn:
     mailData = getDataFromPendingEmails(conn, mail.messageID)
+
+    if mailData.id == "":
+      echo "No pending email found for complaint: " & mail.messageID
+      return
 
     exec(conn, sqlUpdate(
       table = "contacts",
