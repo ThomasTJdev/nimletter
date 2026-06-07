@@ -384,8 +384,10 @@ proc(request: Request) =
         "to_char(mails.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
         "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
         "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
-        "(SELECT COUNT(DISTINCT email_opens.id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as opened_count",
-        "(SELECT COUNT(DISTINCT email_clicks.id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as clicked_count",
+        "(SELECT COUNT(DISTINCT email_opens.pending_email_id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as opened_count",
+        "(SELECT COUNT(DISTINCT email_clicks.pending_email_id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as clicked_count",
+        "(SELECT COUNT(DISTINCT email_bounces.pending_email_id) FROM email_bounces INNER JOIN pending_emails pe ON email_bounces.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as bounced_count",
+        "(SELECT COUNT(DISTINCT email_complaints.pending_email_id) FROM email_complaints INNER JOIN pending_emails pe ON email_complaints.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as complained_count",
         "mails.identifier"
       ],
       joinargs = [
@@ -406,6 +408,7 @@ proc(request: Request) =
   var bodyJson = parseJson("[]")
 
   for mail in mails:
+    let sentCount = mail[7].parseInt()
     bodyJson.add(
       %* {
         "id": mail[0],
@@ -415,11 +418,17 @@ proc(request: Request) =
         "category": mail[4],
         "created_at": mail[5],
         "updated_at": mail[6],
-        "sent_count": mail[7].parseInt(),
-        "pending_count": mail[8].parseInt(),
-        "opened_count": mail[9].parseInt(),
-        "clicked_count": mail[10].parseInt(),
-        "identifier": mail[11]
+        "sent_count":      sentCount,
+        "pending_count":   mail[8].parseInt(),
+        "opened_count":    mail[9].parseInt(),
+        "clicked_count":   mail[10].parseInt(),
+        "bounced_count":   mail[11].parseInt(),
+        "complained_count":mail[12].parseInt(),
+        # Rates are unique counts / sent * 100 (float, one decimal displayed in UI)
+        "open_rate":    if sentCount > 0: (mail[9].parseInt().float  * 100.0 / sentCount.float) else: 0.0,
+        "click_rate":   if sentCount > 0: (mail[10].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+        "bounce_rate":  if sentCount > 0: (mail[11].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+        "identifier": mail[13]
       }
     )
 
@@ -681,6 +690,130 @@ proc(request: Request) =
       "used_in_flows": flowSteps.len > 0,
       "flow_steps": respData,
       "count": flowSteps.len
+    }
+  )
+)
+
+
+mailRouter.get("/api/mails/analytics",
+proc(request: Request) =
+  ## On-demand enriched analytics for a single mail template.
+  ## Returns CTOR, avg time-to-open, device/client breakdown,
+  ## top clicked links, and opens by hour-of-day.
+  ## Designed for lazy loading — not included in /api/mails/all.
+  createTFD()
+  if not c.loggedIn: resp Http401
+
+  let mailIDStr = @"mailID"
+  if mailIDStr == "":
+    resp Http400, "mailID is required"
+
+  var mailID: int
+  try:
+    mailID = mailIDStr.parseInt()
+  except ValueError:
+    resp Http400, "mailID must be an integer"
+
+  var
+    uniqueOpensStr:  string
+    uniqueClicksStr: string
+    avgTimeStr:      string
+    deviceRows:      seq[seq[string]]
+    topLinkRows:     seq[seq[string]]
+    openHourRows:    seq[seq[string]]
+
+  pg.withConnection conn:
+    uniqueOpensStr = getValue(conn, sqlSelect(
+      table    = "email_opens",
+      select   = ["COUNT(DISTINCT email_opens.pending_email_id)"],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_opens.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1".format($mailID)
+    ))
+
+    uniqueClicksStr = getValue(conn, sqlSelect(
+      table    = "email_clicks",
+      select   = ["COUNT(DISTINCT email_clicks.pending_email_id)"],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_clicks.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1".format($mailID)
+    ))
+
+    # Average minutes from send to first open; ignores rows where sent_at is missing
+    # or the open timestamp is invalid (negative delta indicates data anomaly).
+    avgTimeStr = getValue(conn, sqlSelect(
+      table    = "email_opens",
+      select   = ["COALESCE(ROUND(AVG(EXTRACT(EPOCH FROM (email_opens.opened_at - pending_emails.sent_at)) / 60))::text, '0')"],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_opens.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1 AND pending_emails.sent_at IS NOT NULL AND email_opens.opened_at > pending_emails.sent_at".format($mailID)
+    ))
+
+    # Classify device_info (raw User-Agent) into four buckets.
+    # Priority: email client > mobile > desktop > unknown.
+    # Note: Gmail and many security proxies strip UA detail, so 'unknown' may be high.
+    deviceRows = getAllRows(conn, sqlSelect(
+      table    = "email_opens",
+      select   = [
+        """CASE
+          WHEN email_opens.device_info ILIKE '%Outlook%' OR email_opens.device_info ILIKE '%Windows Mail%' THEN 'email_client'
+          WHEN email_opens.device_info ILIKE '%iPhone%'  OR email_opens.device_info ILIKE '%iPad%' OR email_opens.device_info ILIKE '%Android%' THEN 'mobile'
+          WHEN email_opens.device_info ILIKE '%Macintosh%' OR email_opens.device_info ILIKE '%Windows NT%' OR email_opens.device_info ILIKE '%X11%' THEN 'desktop'
+          ELSE 'unknown'
+        END AS device_category""",
+        "COUNT(*) AS cnt"
+      ],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_opens.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1 GROUP BY device_category".format($mailID)
+    ))
+
+    topLinkRows = getAllRows(conn, sqlSelect(
+      table    = "email_clicks",
+      select   = ["email_clicks.link_url", "COUNT(*) AS click_count"],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_clicks.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1 GROUP BY email_clicks.link_url ORDER BY click_count DESC LIMIT 10".format($mailID)
+    ))
+
+    openHourRows = getAllRows(conn, sqlSelect(
+      table    = "email_opens",
+      select   = ["EXTRACT(HOUR FROM email_opens.opened_at)::int AS hour", "COUNT(*) AS cnt"],
+      joinargs = [(table: "pending_emails", tableAs: "", on: @["pending_emails.id = email_opens.pending_email_id"])],
+      customSQL = "WHERE pending_emails.mail_id = $1 GROUP BY hour ORDER BY hour ASC".format($mailID)
+    ))
+
+  let
+    uniqueOpens  = uniqueOpensStr.parseInt()
+    uniqueClicks = uniqueClicksStr.parseInt()
+    ctorVal      = if uniqueOpens > 0: (uniqueClicks.float * 100.0 / uniqueOpens.float) else: 0.0
+
+  var deviceJson = %* {"mobile": 0, "email_client": 0, "desktop": 0, "unknown": 0}
+  for row in deviceRows:
+    let cat = row[0]
+    if cat in ["mobile", "email_client", "desktop", "unknown"]:
+      deviceJson[cat] = %row[1].parseInt()
+
+  var topLinksJson = parseJson("[]")
+  for row in topLinkRows:
+    topLinksJson.add(%* {"url": row[0], "click_count": row[1].parseInt()})
+
+  # Build full 24-hour distribution; hours with zero opens are included as 0
+  var openHoursArr: array[24, int]
+  for row in openHourRows:
+    let h = row[0].parseInt()
+    if h >= 0 and h <= 23:
+      openHoursArr[h] = row[1].parseInt()
+
+  var openHoursJson = parseJson("[]")
+  for h in 0..23:
+    openHoursJson.add(%* {"hour": h, "count": openHoursArr[h]})
+
+  resp Http200, (
+    %* {
+      "mail_id":                  mailID,
+      "unique_opens":             uniqueOpens,
+      "unique_clicks":            uniqueClicks,
+      "ctor":                     ctorVal,
+      "avg_time_to_open_minutes": (if avgTimeStr == "": 0 else: avgTimeStr.parseInt()),
+      "device_breakdown":         deviceJson,
+      "top_links":                topLinksJson,
+      "open_hours":               openHoursJson
     }
   )
 )
