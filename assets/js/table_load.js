@@ -253,10 +253,13 @@ function tableMails() {
         });
         return '<div style="display: flex">' + html + '</div>';
       }},
-      {title:"Sent count", field:"sent_count", vertAlign: "middle", width:120, headerFilter:true},
-      {title:"Pending count", field:"pending_count", vertAlign: "middle", width:120, headerFilter:true},
-      {title:"Opened count", field:"opened_count", vertAlign: "middle", width:120, headerFilter:true},
-      {title:"Clicked count", field:"clicked_count", vertAlign: "middle", width:120, headerFilter:true},
+      {title:"Sent", field:"sent_count", vertAlign: "middle", width:90, headerFilter:true},
+      {title:"Pending", field:"pending_count", vertAlign: "middle", width:90, headerFilter:true},
+      {title:"Unique Opens", field:"opened_count", vertAlign: "middle", width:115, headerFilter:true},
+      {title:"Unique Clicks", field:"clicked_count", vertAlign: "middle", width:115, headerFilter:true},
+      {title:"Open Rate", field:"open_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+      {title:"Click Rate", field:"click_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+      {title:"Bounce Rate", field:"bounce_rate", vertAlign: "middle", width:105, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
       {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
       {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
     ],

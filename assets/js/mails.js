@@ -581,6 +581,21 @@ async function loadMail(id) {
     dqs("#work").appendChild(htmlMail);
     labelFloater();
 
+    // Analytics section: loaded on demand to keep the editor view fast
+    const analyticsSection = document.createElement('div');
+    analyticsSection.style.cssText = 'max-width: 800px; margin-top: 40px; padding-top: 30px; border-top: 1px solid var(--colorN100);';
+    analyticsSection.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <h2 style="margin:0;font-size:17px;font-weight:600;">Analytics</h2>
+        <button class="buttonIcon" id="loadAnalyticsBtn" onclick="loadMailAnalytics(${id})">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" style="height:18px;width:18px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" /></svg>
+          <div class="ml5">Load Analytics</div>
+        </button>
+      </div>
+      <div id="mailAnalyticsPanel"></div>
+    `;
+    dqs("#work").appendChild(analyticsSection);
+
 
     // On any changes to input, select, textarea find .mailSave and append active
     document.querySelectorAll("input, select, textarea").forEach(item => {
@@ -1133,4 +1148,137 @@ function cancelArchiveMailInFlows() {
     window._archiveMailResolve(false);
     window._archiveMailResolve = null;
   }
+}
+
+
+// ---------------------------------------------------------------------------
+// Per-mail enriched analytics (loaded on demand via "Load Analytics" button)
+// ---------------------------------------------------------------------------
+
+function loadMailAnalytics(mailId) {
+  const panel = dqs('#mailAnalyticsPanel');
+  const btn   = dqs('#loadAnalyticsBtn');
+
+  btn.disabled = true;
+  btn.querySelector('.ml5').innerText = 'Loading…';
+  panel.innerHTML = '<div style="color:var(--colorN500);padding:12px 0;">Fetching analytics…</div>';
+
+  fetch('/api/mails/analytics?mailID=' + mailId)
+    .then(manageErrors)
+    .then(r => r.json())
+    .then(data => {
+      btn.style.display = 'none';
+      panel.innerHTML = renderMailAnalyticsHTML(data);
+    })
+    .catch(() => {
+      panel.innerHTML = '<div style="color:var(--colorError);padding:12px 0;">Failed to load analytics. Please try again.</div>';
+      btn.disabled = false;
+      btn.querySelector('.ml5').innerText = 'Retry';
+    });
+}
+
+function renderMailAnalyticsHTML(data) {
+  // ── Stat badges ──────────────────────────────────────────────────────────
+  const ctor    = (data.ctor    || 0).toFixed(1);
+  const avgTime = data.avg_time_to_open_minutes || 0;
+  const avgTimeLabel = avgTime < 60
+    ? avgTime + ' min'
+    : (avgTime / 60).toFixed(1) + ' h';
+
+  const statBadges = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:28px;">
+      <div style="flex:1;min-width:130px;background:var(--colorN20);border-radius:8px;padding:16px;">
+        <div style="font-size:11px;color:var(--colorN500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Unique Opens</div>
+        <div style="font-size:22px;font-weight:700;">${data.unique_opens}</div>
+      </div>
+      <div style="flex:1;min-width:130px;background:var(--colorN20);border-radius:8px;padding:16px;">
+        <div style="font-size:11px;color:var(--colorN500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Unique Clicks</div>
+        <div style="font-size:22px;font-weight:700;">${data.unique_clicks}</div>
+      </div>
+      <div style="flex:1;min-width:130px;background:var(--colorN20);border-radius:8px;padding:16px;">
+        <div style="font-size:11px;color:var(--colorN500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">CTOR</div>
+        <div style="font-size:22px;font-weight:700;">${ctor}%</div>
+        <div style="font-size:10px;color:var(--colorN400);margin-top:2px;">clicks / openers</div>
+      </div>
+      <div style="flex:1;min-width:130px;background:var(--colorN20);border-radius:8px;padding:16px;">
+        <div style="font-size:11px;color:var(--colorN500);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;">Avg. Time to Open</div>
+        <div style="font-size:22px;font-weight:700;">${avgTimeLabel}</div>
+        <div style="font-size:10px;color:var(--colorN400);margin-top:2px;">after send</div>
+      </div>
+    </div>`;
+
+  // ── Device / client breakdown ─────────────────────────────────────────────
+  const dev   = data.device_breakdown;
+  const total = (dev.mobile + dev.email_client + dev.desktop + dev.unknown) || 1;
+  function devBar(label, count, note) {
+    const pct = (count / total * 100).toFixed(1);
+    return `
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+          <span>${label}${note ? ' <span style="color:var(--colorN400);font-size:10px;">'+note+'</span>' : ''}</span>
+          <span>${count} <span style="color:var(--colorN400);">(${pct}%)</span></span>
+        </div>
+        <div style="height:6px;background:var(--colorN100);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:var(--colorPrimary);border-radius:3px;"></div>
+        </div>
+      </div>`;
+  }
+  const deviceSection = `
+    <div style="margin-bottom:28px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:12px;">Device &amp; Client Breakdown</div>
+      ${devBar('Desktop', dev.desktop, '')}
+      ${devBar('Mobile', dev.mobile, '')}
+      ${devBar('Email Client', dev.email_client, '(Outlook / Windows Mail)')}
+      ${devBar('Unknown', dev.unknown, '— Gmail proxy &amp; security scanners strip UA')}
+    </div>`;
+
+  // ── Top clicked links ────────────────────────────────────────────────────
+  let linksSection = '';
+  if (data.top_links && data.top_links.length > 0) {
+    const maxClicks = data.top_links[0].click_count || 1;
+    const rows = data.top_links.map(l => {
+      const pct  = (l.click_count / maxClicks * 100).toFixed(0);
+      const disp = l.url.length > 60 ? l.url.slice(0, 57) + '…' : l.url;
+      return `
+        <tr>
+          <td style="padding:6px 8px 6px 0;font-size:12px;word-break:break-all;">
+            <a href="${l.url}" target="_blank" rel="noopener" style="color:var(--colorPrimary);">${disp}</a>
+          </td>
+          <td style="padding:6px 0;font-size:12px;white-space:nowrap;text-align:right;">${l.click_count}</td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding:0 0 6px 0;">
+            <div style="height:4px;background:var(--colorN100);border-radius:2px;">
+              <div style="height:100%;width:${pct}%;background:var(--colorPrimary);border-radius:2px;"></div>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+    linksSection = `
+      <div style="margin-bottom:28px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Top Clicked Links</div>
+        <table style="width:100%;border-collapse:collapse;">${rows}</table>
+      </div>`;
+  }
+
+  // ── Open time-of-day distribution ────────────────────────────────────────
+  const hours   = data.open_hours || [];
+  const maxOpen = Math.max(...hours.map(h => h.count), 1);
+  const bars    = hours.map(h => {
+    const ht  = Math.round(h.count / maxOpen * 48);
+    const lbl = h.hour.toString().padStart(2, '0');
+    return `<div title="${h.count} opens at ${lbl}:00" style="display:flex;flex-direction:column;align-items:center;flex:1;">
+      <div style="height:48px;display:flex;align-items:flex-end;">
+        <div style="width:8px;background:var(--colorPrimary);border-radius:2px 2px 0 0;height:${ht}px;min-height:${h.count > 0 ? 2 : 0}px;"></div>
+      </div>
+      <div style="font-size:9px;color:var(--colorN400);margin-top:2px;">${h.hour % 6 === 0 ? lbl : ''}</div>
+    </div>`;
+  }).join('');
+  const openHoursSection = `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;">Opens by Hour of Day <span style="font-size:10px;color:var(--colorN400);font-weight:400;">(server time, UTC)</span></div>
+      <div style="display:flex;align-items:flex-end;gap:1px;height:70px;">${bars}</div>
+    </div>`;
+
+  return statBadges + deviceSection + linksSection + openHoursSection;
 }
