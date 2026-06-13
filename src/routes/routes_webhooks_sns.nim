@@ -163,6 +163,7 @@ proc updateUserOpen(mail: MailOpen) =
 
   var
     match: bool
+    hasTrigger: bool
     triggerData: PendingMail
     mailData: PendingMail
 
@@ -190,30 +191,28 @@ proc updateUserOpen(mail: MailOpen) =
         mail.messageID
       )
 
-      # On opt-in messages
-      if mailData.flowID == "":
-        return
+      # Flow-trigger lookup only makes sense for flow emails; opt-in/one-off
+      # emails have no flowID and therefore no next step to schedule.
+      if mailData.flowID != "":
+        hasTrigger = true
+        triggerData = getDataFromPendingEmailsTrigger(
+                    conn, mailData.flowID, $(mailData.stepNumber + 1), mailData.userID)
 
-      #
-      # Do we have a trigger for this click?
-      #
-      triggerData = getDataFromPendingEmailsTrigger(
-                  conn, mailData.flowID, $(mailData.stepNumber + 1), mailData.userID)
-
-  if match and triggerData.triggerType == "open" and triggerData.status == "pending":
+  if match and hasTrigger and triggerData.triggerType == "open" and triggerData.status == "pending":
     triggerScheduleEmail(triggerData)
 
-
-  let data = %* {
-      "success": true,
-      "userAgent": mail.userAgent,
-      "email": mailData.userEmail,
-      "username": mailData.userName,
-      "messageID": mail.messageID,
-      "event": "email_opened"
-    }
-
-  parseWebhookEvent(email_opened, data)
+  # Always fire the outbound webhook when a match was found, regardless of
+  # whether the email belongs to a flow or not.
+  if match:
+    let data = %* {
+        "success": true,
+        "userAgent": mail.userAgent,
+        "email": mailData.userEmail,
+        "username": mailData.userName,
+        "messageID": mail.messageID,
+        "event": "email_opened"
+      }
+    parseWebhookEvent(email_opened, data)
 
 
 proc updateUserClick(mail: MailClick) =
@@ -249,31 +248,28 @@ proc updateUserClick(mail: MailClick) =
         mail.messageID
       )
 
-      # On opt-in messages
-      if mailData.flowID == "":
-        return
-
-      #
-      # Do we have a trigger for this click?
-      #
-      triggerData = getDataFromPendingEmailsTrigger(
-                  conn, mailData.flowID, $(mailData.stepNumber + 1), mailData.userID)
+      # Flow-trigger lookup only makes sense for flow emails; opt-in/one-off
+      # emails have no flowID and therefore no next step to schedule.
+      if mailData.flowID != "":
+        triggerData = getDataFromPendingEmailsTrigger(
+                    conn, mailData.flowID, $(mailData.stepNumber + 1), mailData.userID)
 
   if match and triggerData.triggerType == "click" and triggerData.status == "pending":
     triggerScheduleEmail(triggerData)
 
-
-  let data = %* {
-      "success": true,
-      "userAgent": mail.userAgent,
-      "link": mail.link,
-      "email": mailData.userEmail,
-      "username": mailData.userName,
-      "messageID": mail.messageID,
-      "event": "email_clicked"
-    }
-
-  parseWebhookEvent(email_clicked, data)
+  # Always fire the outbound webhook when a match was found, regardless of
+  # whether the email belongs to a flow or not.
+  if match:
+    let data = %* {
+        "success": true,
+        "userAgent": mail.userAgent,
+        "link": mail.link,
+        "email": mailData.userEmail,
+        "username": mailData.userName,
+        "messageID": mail.messageID,
+        "event": "email_clicked"
+      }
+    parseWebhookEvent(email_clicked, data)
 
 
 var webhooksSnsRouter*: Router

@@ -87,11 +87,15 @@ proc parseWebhookEvent*(event: WebhookEvent, data: JsonNode) =
       client.headers = newHttpHeaders(tmpHeaders)
 
     #
-    # Post data
+    # Post data - wrap in try/except so a network error (DNS failure, timeout,
+    # unreachable host) does not propagate and crash the calling route handler.
     #
-    let response = client.request(webhook[0], httpMethod = HttpPost, body = $data)
-    if not (code(response)).is2xx():
-      echo "Webhook failed: " & webhook[0] & " -> " & response.body
+    try:
+      let response = client.request(webhook[0], httpMethod = HttpPost, body = $data)
+      if not (code(response)).is2xx():
+        echo "Webhook failed: " & webhook[0] & " -> " & response.body
+    except CatchableError as err:
+      echo "Webhook request error: " & webhook[0] & " -> " & err.msg
 
 
 

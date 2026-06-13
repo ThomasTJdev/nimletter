@@ -50,11 +50,11 @@ var
 #
 var routerMain*: Router
 
-# Error handlers
-when defined(release):
-  routerMain.notFoundHandler = routeCustom404
-  routerMain.methodNotAllowedHandler = routeCustom404
-  routerMain.errorHandler = routeErrorHandler
+# Error handlers - registered unconditionally so both dev and release builds
+# return consistent, safe responses for unmatched routes and panics.
+routerMain.notFoundHandler = routeCustom404
+routerMain.methodNotAllowedHandler = routeCustom404
+routerMain.errorHandler = routeErrorHandler
 
 for r in mainRouter.routes:
   routerMain.routes.add(r)

@@ -31,9 +31,10 @@ proc routeCustom404*(request: Request) =
 
 
 proc routeErrorHandler*(request: Request, e: ref Exception) =
-  ## This is a custom 404 handler
+  ## Handles unhandled exceptions from route handlers.
+  ## IMPORTANT: must never throw itself - any exception here leaves the client
+  ## with a bare TCP-level error (no HTTP response at all).
 
-  # createTFD()
   var data: seq[(string, string)]
   for v in request.queryParams:
     data.add((v[0], v[1]))
@@ -42,23 +43,23 @@ proc routeErrorHandler*(request: Request, e: ref Exception) =
     data.add((v[0], v[1]))
 
   data.add(("remote_addr", request.ip))
-  data.add(("http_referer", request.headers["referer"]))
   data.add(("request_uri", request.path))
+  data.add(("error", if e != nil: e.msg else: "unknown"))
 
   echo data
 
   #
-  # Pretty page
+  # Pretty page for browsers
   #
-  if request.reqMethod == HttpGet and request.headers["Accept"].startsWith("text/html"):
+  let acceptHeader = try: request.headers["Accept"] except: ""
+  if request.reqMethod == HttpGet and acceptHeader.startsWith("text/html"):
     var headers: httpheaders.HttpHeaders
     setHeader("Content-Type", $ContentType.Html)
     request.respond(502, headers, "502")
-    # request.respond(502, headers, gen502(c, "502"))
     return
 
   #
-  # Text response
+  # Plain text for API / webhook callers
   #
   var headers: httpheaders.HttpHeaders
   setHeader("Content-Type", $ContentType.Text)
