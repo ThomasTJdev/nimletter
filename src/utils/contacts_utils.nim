@@ -58,6 +58,40 @@ proc createMetaWithCountry*(ip: string): string =
   return $( %* { "country": country } )
 
 
+proc mergeContactMeta(ip: string, userMeta: JsonNode = nil): JsonNode =
+  result = parseJson(createMetaWithCountry(ip))
+  if userMeta != nil:
+    for k, v in userMeta.pairs:
+      result[k] = v
+
+
+proc parseContactMetaFromBody(jsonBody: JsonNode): (bool, JsonNode, string) =
+  if not jsonBody.hasKey("meta"):
+    return (true, nil, "")
+
+  let metaNode = jsonBody["meta"]
+  case metaNode.kind
+  of JObject:
+    if metaNode.len() == 0:
+      return (true, nil, "")
+    return (true, metaNode, "")
+  of JString:
+    let metaStr = metaNode.getStr().strip()
+    if metaStr.len() == 0:
+      return (true, nil, "")
+    try:
+      let metaJson = parseJson(metaStr)
+      if metaJson.kind != JObject:
+        return (false, nil, "Invalid meta JSON")
+      if metaJson.len() == 0:
+        return (true, nil, "")
+      return (true, metaJson, "")
+    except:
+      return (false, nil, "Invalid meta JSON")
+  else:
+    return (false, nil, "Invalid meta JSON")
+
+
 proc moveFromPendingToSubscription*(userID: string) =
   # Get pending lists, and then loop and add to subscriptions
   pg.withConnection conn:
@@ -184,7 +218,7 @@ proc addContactToListBody*(body: string): tuple[success: bool, msg: string, data
   })
 
 
-proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq[string], ip: string = ""): (bool, string) =
+proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq[string], ip: string = "", meta: JsonNode = nil): (bool, string) =
 
   var
     userID: string
@@ -210,7 +244,7 @@ proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq
         email,
         name,
         $requiresDoubleOptIn,
-        createMetaWithCountry(ip),
+        $(mergeContactMeta(ip, meta)),
         (
           if requiresDoubleOptIn and listIDs.len() > 0:
             "{" & listIDs.join(",") & "}"
@@ -249,15 +283,21 @@ proc createContactManual*(body: string): tuple[success: bool, msg: string, data:
   if name.len() > 255:
     return (false, "Name too long", nil)
 
+  let (metaOk, userMeta, metaErr) = parseContactMetaFromBody(jsonBody)
+  if not metaOk:
+    return (false, metaErr, nil)
+
   let listID =
     if list != "":
       listIDfromIdentifier(list)
     else:
       "1" # => Default list
 
-  let (createSuccess, userID) = createContact(email, name, requiresDoubleOptIn, listIDs = @[])
+  let (createSuccess, userID) = createContact(email, name, requiresDoubleOptIn, listIDs = @[], meta = userMeta)
   if not createSuccess:
     return (false, "Contact already exists", nil)
+
+  let storedMeta = mergeContactMeta("", userMeta)
 
   if requiresDoubleOptIn:
     emailOptinSend(email, name, userID)
@@ -275,6 +315,7 @@ proc createContactManual*(body: string): tuple[success: bool, msg: string, data:
       "email": email,
       "name": name,
       "list": (if list != "": list else: "default"),
+      "meta": storedMeta,
       "event": "contact_created"
     }
 

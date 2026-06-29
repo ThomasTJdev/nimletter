@@ -158,7 +158,26 @@ curl -X POST \
 </pre>
 </div>
 <div>
-  <b>Create contact and add to list:</b>
+<b>Create contact with meta:</b>
+<pre>
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "event": "contact-create",
+    "email": "mail@nimletter.com",
+    "name": "Nim Letter",
+    "double_opt_in": false,
+    "flow_step": 1,
+    "meta": {
+      "external_id": "abc-123",
+      "source": "crm"
+    }
+  }' \
+  http://localhost:5555/api/event
+</pre>
+</div>
+<div>
   <pre>
   curl -X POST \
     -H "Content-Type: application/json" \
