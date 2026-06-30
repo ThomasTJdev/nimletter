@@ -218,18 +218,22 @@ proc addContactToListBody*(body: string): tuple[success: bool, msg: string, data
   })
 
 
-proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq[string], ip: string = "", meta: JsonNode = nil): (bool, string) =
+proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq[string], ip: string = "", meta: JsonNode = nil): tuple[success: bool, id: string, alreadyExists: bool] =
 
   var
     userID: string
     success: bool
   pg.withConnection conn:
-    if getValue(conn, sqlSelect(
+    # Reuse the existing ID so callers can act on the existing contact
+    # without needing a second lookup.
+    let existingID = getValue(conn, sqlSelect(
         table = "contacts",
         select = ["id"],
         where = ["email = ?"]
-    ), email) != "":
-      return (false, "Contact already exists")
+    ), email)
+
+    if existingID != "":
+      return (false, existingID, true)
 
     success = true
     userID = $insertID(conn, sqlInsert(
@@ -253,7 +257,7 @@ proc createContact*(email, name: string, requiresDoubleOptIn: bool, listIDs: seq
         )
       )
 
-  return (success, userID)
+  return (success, userID, false)
 
 
 proc createContactManual*(body: string): tuple[success: bool, msg: string, data: JsonNode] =
@@ -293,7 +297,7 @@ proc createContactManual*(body: string): tuple[success: bool, msg: string, data:
     else:
       "1" # => Default list
 
-  let (createSuccess, userID) = createContact(email, name, requiresDoubleOptIn, listIDs = @[], meta = userMeta)
+  let (createSuccess, userID, _) = createContact(email, name, requiresDoubleOptIn, listIDs = @[], meta = userMeta)
   if not createSuccess:
     return (false, "Contact already exists", nil)
 

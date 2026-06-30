@@ -154,6 +154,7 @@ proc(request: Request) =
   var
     userID: string
     createSuccess: bool
+    contactAlreadyExists: bool
     listsData: tuple[requireOptIn: bool, ids: seq[string]] = (true, @["1"])
   pg.withConnection conn:
 
@@ -168,11 +169,38 @@ proc(request: Request) =
         listsTmp.add(listUUID)
       listsData = listIDsFromUUIDs(listsTmp, true)
 
-    (createSuccess, userID) = createContact(email, name, listsData.requireOptIn, listsData.ids, request.ip)
+    (createSuccess, userID, contactAlreadyExists) = createContact(email, name, listsData.requireOptIn, listsData.ids, request.ip)
+
+  if contactAlreadyExists:
+    # Contact already exists — subscribe them to any lists they aren't on yet.
+    # Guard on double_opt_in only when the lists actually require it; an
+    # existing contact who already confirmed should never be gated again.
+    if listsData.requireOptIn:
+      var alreadyConfirmed: bool
+      pg.withConnection conn:
+        alreadyConfirmed = getValue(conn, sqlSelect(
+            table = "contacts",
+            select = ["double_opt_in"],
+            where = ["id = ?"]
+          ), userID) == "t"
+
+      if alreadyConfirmed:
+        for listID in listsData.ids:
+          discard addContactToList(userID, listID)
+      else:
+        # Not yet confirmed: append lists to pending and re-send the opt-in email.
+        emailOptinSend(email, name, userID)
+        for listID in listsData.ids:
+          discard addContactToPendinglist(userID, listID)
+    else:
+      for listID in listsData.ids:
+        discard addContactToList(userID, listID)
+
+    # Return generic success regardless — avoids leaking whether the address
+    # was already known.
+    resp Http200, nimfOptinSubscribe(false, "", "Success")
 
   if not createSuccess:
-    # Do not show if success or not since that would allow a user to check
-    # if the contact already exists.
     resp Http200, nimfOptinSubscribe(false, "", "Success")
 
   if listsData.requireOptIn:
