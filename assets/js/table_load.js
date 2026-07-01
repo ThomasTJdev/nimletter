@@ -63,15 +63,99 @@ function addNewButtonClean(onclick, text) {
 
 */
 let objTableContacts;
-function tableContacts() {
+function tableContacts(analyticsMode = false) {
   dqs("#heading").innerText = "Contacts";
   dqs("#infotext").innerHTML = 'These are all the contacts in the system. A contact can just "be here" without subscribing to any list. A contact can also be subscribe to one or more lists. You can manually do these actions. We keep contacts here even when email bounces or complaints to ensure we don\'t resend emails to them.';
-  dqs("#work").innerHTML = addNewButton("contacts", "addContact()", "Add contact");
+
+  const analyticsButton = `
+    <button onclick="tableContacts(${!analyticsMode})" style="display: flex; align-items: center; width: 200px; justify-content: center;">
+      <svg style="height:24px; width: 24px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+      </svg>
+      <div style="margin-left: 5px;">${analyticsMode ? "Hide Analytics" : "Load Analytics"}</div>
+    </button>`;
+
+  dqs("#work").innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(max(200px, 100px), 1fr)); grid-gap: 30px;">
+      ${addNewButtonClean("addContact()", "Add contact")}
+      ${analyticsButton}
+    </div>
+    <div id="contacts"></div>`;
+
+  const baseColumns = [
+    {formatter:"rowSelection", titleFormatter:"rowSelection", titleFormatterParams:{
+      rowRange:"active"
+    }, hozAlign:"center", headerSort:false},
+    {title:"ID", field:"id", width:50, headerFilter:true},
+    {title:"UUID", field:"uuid", width:300, headerFilter:true},
+    {title:"Email", field:"email", width:250, headerFilter:true, cssClass:"semibold"},
+    {title:"Name", field:"name", width:200, headerFilter:true},
+    {title:"Status", field:"status", width:100, headerFilter:true},
+    {title:"Requires Double Opt-In", field:"requires_double_opt_in", hozAlign:"center", width: 80, headerFilter:true, formatter:"toggle", formatterParams:{
+      size:16,
+      onValue:"on",
+      offValue:"off",
+      onTruthy:true,
+      onColor:"var(--colorG200)",
+      offColor:"var(--colorN80)",
+      clickable:false,
+    }},
+    {title:"Double Opt-In", field:"double_opt_in", hozAlign:"center", width: 80, headerFilter:true, formatter:"toggle", formatterParams:{
+      size:16,
+      onValue:"on",
+      offValue:"off",
+      onTruthy:true,
+      onColor:"var(--colorG200)",
+      offColor:"var(--colorN80)",
+      clickable:false,
+    }},
+    {title:"Country", field:"country", hozAlign:"left", width: 140, headerFilter:true},
+    {title:"Lists", field:"subscribed_lists", hozAlign:"left", width: 300, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
+      if (cell.getValue() == "") {
+        return "";
+      }
+      let lists = cell.getValue().split(", ");
+      let html = "";
+      lists.forEach(list => {
+        html += `<div style="font-size: 10px; border: 1px solid var(--colorN100); border-radius: 10px; padding: 0px 6px; background-color: var(--colorN20); margin-right: 5px;white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${list}">${list}</div>`;
+      });
+      return '<div style="display: flex">' + html + '</div>';
+    }},
+    {title:"Has Unsubscribed", field:"has_unsubscribed", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
+      return cell.getValue() ? "Yes" : "No";
+    }},
+    {title:"Unsubscribed At", field:"unsubscribed_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
+    {title:"Unscribed From Lists", field:"unscribed_from_lists", hozAlign:"left", width: 140, headerFilter:true},
+    {title:"Bounced At", field:"bounced_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
+    {title:"Complained At", field:"complained_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
+    {title:"Created At", field:"created_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
+    {title:"Updated At", field:"updated_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
+  ];
+
+  // Analytics columns are fetched separately via ?analytics=true to avoid
+  // slow correlated subqueries on large datasets.
+  const analyticsColumns = [
+    {title:"Opening Rate", field:"opening_rate", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
+      let rowData = cell.getRow().getData(),
+        sent = rowData.emails_count_sent,
+        open = rowData.emails_count_open;
+      return sent > 0 ? Math.round((open / sent) * 100) + "%" : "0%";
+    }},
+    {title:"Emails Open", field:"emails_count_open", hozAlign:"center", width: 140, headerFilter:true},
+    {title:"Emails Clicks", field:"emails_count_clicks", hozAlign:"center", width: 140, headerFilter:true},
+    {title:"Emails Sent", field:"emails_count_sent", hozAlign:"center", width: 140, headerFilter:true},
+    {title:"Emails Pending", field:"emails_count_pending", hozAlign:"center", width: 140, headerFilter:true},
+  ];
+
+  // Insert analytics columns after "Lists" and before "Has Unsubscribed"
+  const columns = analyticsMode
+    ? [...baseColumns.slice(0, 10), ...analyticsColumns, ...baseColumns.slice(10)]
+    : baseColumns;
 
   objTableContacts = new Tabulator("#contacts", {
     height:"70vh",
     layout:"fitColumns",
-    ajaxURL:"/api/contacts/all",
+    ajaxURL: analyticsMode ? "/api/contacts/all?analytics=true" : "/api/contacts/all",
     paginationSize:15000,
     progressiveLoad:"load",
     initialSort:[
@@ -80,8 +164,6 @@ function tableContacts() {
     ],
     rowFormatter:function(row){
       var data = row.getData();
-
-      // If bounced_at then extreme red, if complained_at then extreme orange
       if(data.bounced_at){
         row.getElement().style.backgroundColor = "#ff5959";
       } else if(data.complained_at){
@@ -89,87 +171,9 @@ function tableContacts() {
       } else if(data.status == 'disabled'){
         row.getElement().style.backgroundColor = "#c2c2c2";
       }
-
     },
-    columns:[
-      {formatter:"rowSelection", titleFormatter:"rowSelection", titleFormatterParams:{
-        rowRange:"active"
-      }, hozAlign:"center", headerSort:false},
-      {title:"ID", field:"id", width:50, headerFilter:true},
-      {title:"UUID", field:"uuid", width:300, headerFilter:true},
-      {title:"Email", field:"email", width:250, headerFilter:true, cssClass:"semibold"},
-      {title:"Name", field:"name", width:200, headerFilter:true},
-      {title:"Status", field:"status", width:100, headerFilter:true},
-      {title:"Requires Double Opt-In", field:"requires_double_opt_in", hozAlign:"center", width: 80, headerFilter:true, formatter:"toggle", formatterParams:{
-        size:16,
-        onValue:"on",
-        offValue:"off",
-        onTruthy:true,
-        onColor:"var(--colorG200)",
-        offColor:"var(--colorN80)",
-        clickable:false,
-      }},
-      {title:"Double Opt-In", field:"double_opt_in", hozAlign:"center", width: 80, headerFilter:true, formatter:"toggle", formatterParams:{
-        size:16,
-        onValue:"on",
-        offValue:"off",
-        onTruthy:true,
-        onColor:"var(--colorG200)",
-        offColor:"var(--colorN80)",
-        clickable:false,
-      }},
-
-      {title:"Country", field:"country", hozAlign:"left", width: 140, headerFilter:true},
-
-      // Lists
-      {title:"Lists", field:"subscribed_lists", hozAlign:"left", width: 300, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-      if (cell.getValue() == "") {
-        return "";
-      }
-
-      let lists = cell.getValue().split(", ");
-      let html = "";
-      lists.forEach(list => {
-        html += `<div style="font-size: 10px; border: 1px solid var(--colorN100); border-radius: 10px; padding: 0px 6px; background-color: var(--colorN20); margin-right: 5px;white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${list}">${list}</div>`;
-      });
-      return '<div style="display: flex">' + html + '</div>';
-      }},
-
-      // {title:"Bad opening rate", field:"bad_opening_rate", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-      //   let data = cell.getRow().getData();
-      //   if(data.emails_count_sent >= 2 && data.emails_count_open <= 0){
-      //     return '<div style="color: red; font-weight: 500;">Yes</div>';
-      //   } else {
-      //     return '<div style="color: green; font-weight: 500;">No</div>';
-      //   }
-      // }},
-
-      {title:"Opening Rate", field:"opening_rate", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-      let
-        rowData = cell.getRow().getData(),
-        sent = rowData.emails_count_sent,
-        open = rowData.emails_count_open;
-
-      return sent > 0 ? Math.round((open / sent) * 100) + "%" : "0%";
-      }
-      },
-      {title:"Emails Open", field:"emails_count_open", hozAlign:"center", width: 140, headerFilter:true},
-      {title:"Emails Clicks", field:"emails_count_clicks", hozAlign:"center", width: 140, headerFilter:true},
-      {title:"Emails Sent", field:"emails_count_sent", hozAlign:"center", width: 140, headerFilter:true},
-      {title:"Emails Pending", field:"emails_count_pending", hozAlign:"center", width: 140, headerFilter:true},
-
-      {title:"Has Unsubscribed", field:"has_unsubscribed", hozAlign:"center", width: 140, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-        return cell.getValue() ? "Yes" : "No";
-      }},
-      {title:"Unsubscribed At", field:"unsubscribed_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
-      {title:"Unscribed From Lists", field:"unscribed_from_lists", hozAlign:"left", width: 140, headerFilter:true},
-
-      {title:"Bounced At", field:"bounced_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
-      {title:"Complained At", field:"complained_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 140, headerFilter:true},
-      {title:"Created At", field:"created_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
-      {title:"Updated At", field:"updated_at", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
-    ],
-    });
+    columns: columns,
+  });
 
   objTableContacts.on("rowClick", function(e, row){
     loadContact(row.getData().id);
@@ -200,19 +204,85 @@ function toggleArchivedMails() {
     }
   }
 }
-function tableMails() {
+function tableMails(analyticsMode = false) {
   dqs("#heading").innerText = "Mails";
   dqs("#infotext").innerHTML = 'These are all the mails in the system. A mail can be a single email sent as a one-time (e.g. "Welcome to Nimletter!"), or a flow (e.g. "Nimletter tips").';
 
-  dqs("#work").innerHTML = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(max(200px, 100px), 1fr)); grid-gap: 30px;">
+  const analyticsButton = `
+    <button onclick="tableMails(${!analyticsMode})" style="display: flex; align-items: center; width: 200px; justify-content: center;">
+      <svg style="height:24px; width: 24px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+      </svg>
+      <div style="margin-left: 5px;">${analyticsMode ? "Hide Analytics" : "Load Analytics"}</div>
+    </button>`;
+
+  dqs("#work").innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(max(200px, 100px), 1fr)); grid-gap: 30px;">
       ${addNewButtonClean("addMail()", "Add mail")}
       ${addNewButtonClean("toggleArchivedMails()", "Show archived")}
-    </div><div id="mails"></div>`;
+      ${analyticsButton}
+    </div>
+    <div id="mails"></div>`;
+
+  const categoryFormatter = function(cell, formatterParams, onRendered){
+    const category = cell.getValue();
+    const emojiMap = {
+      'template': '📋',
+      'newsletter': '📰',
+      'drip': '💧',
+      'campaign': '🎯',
+      'singleshot': '📤',
+      'event': '📅',
+      'flow': '🔄'
+    };
+    const emoji = emojiMap[category] || '📧';
+    return `<span style="font-size: 16px; margin-right: 8px;">${emoji}</span>${category}`;
+  };
+
+  const tagsFormatter = function(cell, formatterParams, onRendered){
+    if (cell.getValue() == "") {
+      return "";
+    }
+    let tags = cell.getValue();
+    let html = "";
+    tags.forEach(tag => {
+      html += `<div style="font-size: 12px; border: 1px solid var(--colorN100); border-radius: 10px; padding: 0px 6px; background-color: var(--colorN20); margin-right: 5px;">${tag}</div>`;
+    });
+    return '<div style="display: flex">' + html + '</div>';
+  };
+
+  const baseColumns = [
+    {title:"ID", field:"id", vertAlign: "middle", width:60, headerFilter:true},
+    {title:"Category", field:"category", vertAlign: "middle", width:200, cssClass:"semibold", headerFilter:true, formatter: categoryFormatter},
+    {title:"Identifier", field:"identifier", vertAlign: "middle", width:200, headerFilter:true},
+    {title:"Name", field:"name", vertAlign: "middle", minWidth:200, headerFilter:true},
+    {title:"Subject", field:"subject", vertAlign: "middle", minWidth:250, headerFilter:true},
+    {title:"Tags", field:"tags", vertAlign: "middle", width:200, headerFilter:true, formatter: tagsFormatter},
+    {title:"Sent", field:"sent_count", vertAlign: "middle", width:90, headerFilter:true},
+    {title:"Pending", field:"pending_count", vertAlign: "middle", width:90, headerFilter:true},
+    {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
+    {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
+  ];
+
+  // Analytics columns are fetched separately via ?analytics=true to avoid
+  // slow correlated subqueries on large datasets.
+  const analyticsColumns = [
+    {title:"Unique Opens", field:"opened_count", vertAlign: "middle", width:115, headerFilter:true},
+    {title:"Unique Clicks", field:"clicked_count", vertAlign: "middle", width:115, headerFilter:true},
+    {title:"Open Rate", field:"open_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+    {title:"Click Rate", field:"click_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+    {title:"Bounce Rate", field:"bounce_rate", vertAlign: "middle", width:105, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+  ];
+
+  // Insert analytics columns after "Pending" and before "Created At"
+  const columns = analyticsMode
+    ? [...baseColumns.slice(0, 8), ...analyticsColumns, ...baseColumns.slice(8)]
+    : baseColumns;
 
   objTableMails = new Tabulator("#mails", {
     height:"70vh",
     layout:"fitColumns",
-    ajaxURL:"/api/mails/all",
+    ajaxURL: analyticsMode ? "/api/mails/all?analytics=true" : "/api/mails/all",
     progressiveLoad:"load",
     paginationSize: 1000,
     initialSort:[
@@ -222,51 +292,10 @@ function tableMails() {
     initialFilter:[
       {field:"category", type:"!=", value:"archived"}
     ],
-    // rowHeight:50,
-    columns:[
-      {title:"ID", field:"id", vertAlign: "middle", width:60, headerFilter:true},
-      {title:"Category", field:"category", vertAlign: "middle", width:200, cssClass:"semibold", headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-        const category = cell.getValue();
-        const emojiMap = {
-          'template': '📋',
-          'newsletter': '📰',
-          'drip': '💧',
-          'campaign': '🎯',
-          'singleshot': '📤',
-          'event': '📅',
-          'flow': '🔄'
-        };
-        const emoji = emojiMap[category] || '📧';
-        return `<span style="font-size: 16px; margin-right: 8px;">${emoji}</span>${category}`;
-      }},
-      {title:"Identifier", field:"identifier", vertAlign: "middle", width:200, headerFilter:true},
-      {title:"Name", field:"name", vertAlign: "middle", minWidth:200, headerFilter:true},
-      {title:"Subject", field:"subject", vertAlign: "middle", minWidth:250, headerFilter:true},
-      {title:"Tags", field:"tags", vertAlign: "middle", width:200, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-        if (cell.getValue() == "") {
-          return "";
-        }
-        let tags = cell.getValue();
-        let html = "";
-        tags.forEach(list => {
-          html += `<div style="font-size: 12px; border: 1px solid var(--colorN100); border-radius: 10px; padding: 0px 6px; background-color: var(--colorN20); margin-right: 5px;">${list}</div>`;
-        });
-        return '<div style="display: flex">' + html + '</div>';
-      }},
-      {title:"Sent", field:"sent_count", vertAlign: "middle", width:90, headerFilter:true},
-      {title:"Pending", field:"pending_count", vertAlign: "middle", width:90, headerFilter:true},
-      {title:"Unique Opens", field:"opened_count", vertAlign: "middle", width:115, headerFilter:true},
-      {title:"Unique Clicks", field:"clicked_count", vertAlign: "middle", width:115, headerFilter:true},
-      {title:"Open Rate", field:"open_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
-      {title:"Click Rate", field:"click_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
-      {title:"Bounce Rate", field:"bounce_rate", vertAlign: "middle", width:105, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
-      {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
-      {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 160, headerFilter:true},
-    ],
+    columns: columns,
   });
 
   objTableMails.on("rowClick", function(e, row){
-    // loadMail(row.getData().id);
     if (e.ctrlKey) {
       window.open("/mails?viewMail=" + row.getData().id, "_blank");
     } else {

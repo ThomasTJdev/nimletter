@@ -360,44 +360,74 @@ proc(request: Request) =
 
 mailRouter.get("/api/mails/all",
 proc(request: Request) =
+  ## Returns mails list. Pass ?analytics=true to include engagement stats
+  ## (opens, clicks, bounce rates). Omitting analytics skips the expensive
+  ## correlated subqueries, keeping the default view fast on large datasets.
   createTFD()
   if not c.loggedIn: resp Http401
 
   let
-    limit = (if @"size" == "": 2000 else: @"size".parseInt())
-    offset = (if @"page" == "": 0 elif @"page".parseInt() == 1: 0 else: (@"page".parseInt() - 1) * limit)
+    limit        = (if @"size" == "": 2000 else: @"size".parseInt())
+    offset       = (if @"page" == "": 0 elif @"page".parseInt() == 1: 0 else: (@"page".parseInt() - 1) * limit)
+    analyticsMode = @"analytics" == "true"
 
   var
     mails: seq[seq[string]]
     mailsCount: int
 
   pg.withConnection conn:
-    mails = getAllRows(conn, sqlSelect(
-      table   = "mails",
-      select  = [
-        "mails.id",
-        "mails.name",
-        "mails.subject",
-        "array_to_string(mails.tags, ',')",
-        "mails.category",
-        "to_char(mails.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
-        "to_char(mails.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
-        "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
-        "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
-        "(SELECT COUNT(DISTINCT email_opens.pending_email_id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as opened_count",
-        "(SELECT COUNT(DISTINCT email_clicks.pending_email_id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as clicked_count",
-        "(SELECT COUNT(DISTINCT email_bounces.pending_email_id) FROM email_bounces INNER JOIN pending_emails pe ON email_bounces.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as bounced_count",
-        "(SELECT COUNT(DISTINCT email_complaints.pending_email_id) FROM email_complaints INNER JOIN pending_emails pe ON email_complaints.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as complained_count",
-        "mails.identifier"
-      ],
-      joinargs = [
-        (table: "pending_emails", tableAs: "", on: @["pending_emails.mail_id = mails.id"])
-      ],
-      customSQL = "GROUP BY mails.category, mails.name, mails.subject, mails.id, mails.subject, mails.tags, mails.created_at, mails.updated_at, mails.identifier ORDER BY mails.category, mails.name ASC LIMIT $1 OFFSET $2".format(
-        $limit,
-        $offset
-      )
-    ))
+    if analyticsMode:
+      # Full query including per-mail engagement counts — slower on large datasets
+      mails = getAllRows(conn, sqlSelect(
+        table   = "mails",
+        select  = [
+          "mails.id",
+          "mails.name",
+          "mails.subject",
+          "array_to_string(mails.tags, ',')",
+          "mails.category",
+          "to_char(mails.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+          "to_char(mails.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+          "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
+          "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
+          "(SELECT COUNT(DISTINCT email_opens.pending_email_id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as opened_count",
+          "(SELECT COUNT(DISTINCT email_clicks.pending_email_id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as clicked_count",
+          "(SELECT COUNT(DISTINCT email_bounces.pending_email_id) FROM email_bounces INNER JOIN pending_emails pe ON email_bounces.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as bounced_count",
+          "(SELECT COUNT(DISTINCT email_complaints.pending_email_id) FROM email_complaints INNER JOIN pending_emails pe ON email_complaints.pending_email_id = pe.id WHERE pe.mail_id = mails.id) as complained_count",
+          "mails.identifier"
+        ],
+        joinargs = [
+          (table: "pending_emails", tableAs: "", on: @["pending_emails.mail_id = mails.id"])
+        ],
+        customSQL = "GROUP BY mails.category, mails.name, mails.subject, mails.id, mails.subject, mails.tags, mails.created_at, mails.updated_at, mails.identifier ORDER BY mails.category, mails.name ASC LIMIT $1 OFFSET $2".format(
+          $limit,
+          $offset
+        )
+      ))
+    else:
+      # Simple query — sent/pending counts only, no correlated subqueries for opens/clicks/rates
+      mails = getAllRows(conn, sqlSelect(
+        table   = "mails",
+        select  = [
+          "mails.id",
+          "mails.name",
+          "mails.subject",
+          "array_to_string(mails.tags, ',')",
+          "mails.category",
+          "to_char(mails.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+          "to_char(mails.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+          "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') as sent_count",
+          "COUNT(DISTINCT pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') as pending_count",
+          "mails.identifier"
+        ],
+        joinargs = [
+          (table: "pending_emails", tableAs: "", on: @["pending_emails.mail_id = mails.id"])
+        ],
+        customSQL = "GROUP BY mails.category, mails.name, mails.subject, mails.id, mails.tags, mails.created_at, mails.updated_at, mails.identifier ORDER BY mails.category, mails.name ASC LIMIT $1 OFFSET $2".format(
+          $limit,
+          $offset
+        )
+      ))
 
     mailsCount = getRow(conn, sqlSelect(
       table   = "mails",
@@ -408,29 +438,45 @@ proc(request: Request) =
   var bodyJson = parseJson("[]")
 
   for mail in mails:
-    let sentCount = mail[7].parseInt()
-    bodyJson.add(
-      %* {
-        "id": mail[0],
-        "name": mail[1],
-        "subject": mail[2],
-        "tags": mail[3].split(","),
-        "category": mail[4],
-        "created_at": mail[5],
-        "updated_at": mail[6],
-        "sent_count":      sentCount,
-        "pending_count":   mail[8].parseInt(),
-        "opened_count":    mail[9].parseInt(),
-        "clicked_count":   mail[10].parseInt(),
-        "bounced_count":   mail[11].parseInt(),
-        "complained_count":mail[12].parseInt(),
-        # Rates are unique counts / sent * 100 (float, one decimal displayed in UI)
-        "open_rate":    if sentCount > 0: (mail[9].parseInt().float  * 100.0 / sentCount.float) else: 0.0,
-        "click_rate":   if sentCount > 0: (mail[10].parseInt().float * 100.0 / sentCount.float) else: 0.0,
-        "bounce_rate":  if sentCount > 0: (mail[11].parseInt().float * 100.0 / sentCount.float) else: 0.0,
-        "identifier": mail[13]
-      }
-    )
+    if analyticsMode:
+      let sentCount = mail[7].parseInt()
+      bodyJson.add(
+        %* {
+          "id": mail[0],
+          "name": mail[1],
+          "subject": mail[2],
+          "tags": mail[3].split(","),
+          "category": mail[4],
+          "created_at": mail[5],
+          "updated_at": mail[6],
+          "sent_count":       sentCount,
+          "pending_count":    mail[8].parseInt(),
+          "opened_count":     mail[9].parseInt(),
+          "clicked_count":    mail[10].parseInt(),
+          "bounced_count":    mail[11].parseInt(),
+          "complained_count": mail[12].parseInt(),
+          # Rates are unique counts / sent * 100 (float, one decimal displayed in UI)
+          "open_rate":    if sentCount > 0: (mail[9].parseInt().float  * 100.0 / sentCount.float) else: 0.0,
+          "click_rate":   if sentCount > 0: (mail[10].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+          "bounce_rate":  if sentCount > 0: (mail[11].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+          "identifier": mail[13]
+        }
+      )
+    else:
+      bodyJson.add(
+        %* {
+          "id": mail[0],
+          "name": mail[1],
+          "subject": mail[2],
+          "tags": mail[3].split(","),
+          "category": mail[4],
+          "created_at": mail[5],
+          "updated_at": mail[6],
+          "sent_count":   mail[7].parseInt(),
+          "pending_count": mail[8].parseInt(),
+          "identifier": mail[9]
+        }
+      )
 
   resp Http200, (
     %* {

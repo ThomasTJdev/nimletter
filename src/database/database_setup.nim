@@ -24,12 +24,40 @@ GRANT ALL PRIVILEGES ON DATABASE $1 TO $2;
 """
 
 
-proc databaseCreate*() =
+proc readDbSchema*(): string =
   when defined(release):
-    let dbSchema = readFile("./db_schema.sql")
+    readFile("./db_schema.sql")
   else:
-    let dbSchema = readFile("./src/database/db_schema.sql")
+    readFile("./src/database/db_schema.sql")
 
+
+proc databaseMigrate*() =
+  ## Apply incremental schema changes from the changelog section of db_schema.sql.
+  ## Safe to run on every startup — each statement uses IF NOT EXISTS.
+  let changelogMarker = "-- Changelog"
+  let dbSchema = readDbSchema()
+  let changelogStart = dbSchema.find(changelogMarker)
+  if changelogStart < 0:
+    return
+
+  let changelogSql = dbSchema[changelogStart .. ^1]
+  for sqlItem in changelogSql.split(";\n"):
+    let statement = sqlItem.strip()
+    if statement == "" or statement == changelogMarker:
+      continue
+    if not statement.startsWith("ALTER TABLE"):
+      continue
+
+    try:
+      pg.withConnection conn:
+        exec(conn, sql(statement & ";"))
+    except:
+      echo "Error executing migration SQL: " & statement
+      echo "Got this error: " & getCurrentExceptionMsg()
+
+
+proc databaseCreate*() =
+  let dbSchema = readDbSchema()
   let dbSplit = dbSchema.split(";\n")
 
   pg.withConnection conn:

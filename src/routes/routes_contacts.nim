@@ -656,52 +656,84 @@ proc(request: Request) =
 
 contactsRouter.get("/api/contacts/all",
 proc(request: Request) =
+  ## Returns contacts list. Pass ?analytics=true to include email engagement
+  ## stats (opens, clicks, rates). Omitting analytics keeps the query fast
+  ## by skipping expensive correlated subqueries and the pending_emails JOIN.
   createTFD()
   if not c.loggedIn: resp Http401
 
   let
-    limit = (if @"size" == "": 5000 else: @"size".parseInt())
-    offset = (if @"page" == "": 0 elif @"page".parseInt() == 1: 0 else: (@"page".parseInt() - 1) * limit)
+    limit        = (if @"size" == "": 5000 else: @"size".parseInt())
+    offset       = (if @"page" == "": 0 elif @"page".parseInt() == 1: 0 else: (@"page".parseInt() - 1) * limit)
+    analyticsMode = @"analytics" == "true"
 
   var
     contacts: seq[seq[string]]
     contactsCount: int
 
   pg.withConnection conn:
-    contacts = getAllRows(conn, sqlSelect(
-      table = "contacts",
-      select = [
-        "contacts.id",
-        "contacts.uuid",
-        "contacts.email",
-        "contacts.name",
-        "contacts.requires_double_opt_in",
-        "contacts.double_opt_in",
-        "contacts.double_opt_in_data",
-        "contacts.bounced_at",
-        "contacts.complained_at",
-        "to_char(contacts.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
-        "to_char(contacts.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
-        "contacts.status",
-        "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') AS sent_emails_count",
-        "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') AS pending_emails_count",
-        "(SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) AS email_opens_count",
-        "(SELECT COUNT(*) FROM email_clicks WHERE email_clicks.user_id = contacts.id) AS email_clicks_count",
-        "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
-        "contacts.meta->>'country' AS country",
-        "CASE WHEN COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') = 0 THEN 0 ELSE (SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) * 100 / COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') END AS opening_rate",
-        "contacts.has_unsubscribed",
-        "contacts.unsubscribed_at",
-        "contacts.unscribed_from_lists"
-      ],
-      joinargs = [
-        (table: "pending_emails", tableAs: "", on: @["contacts.id = pending_emails.user_id"])
-      ],
-      customSQL = "GROUP BY contacts.id ORDER BY contacts.created_at DESC LIMIT $1 OFFSET $2".format(
-        $limit,
-        $offset
-      )))
-
+    if analyticsMode:
+      # Full query including email engagement counts — slower on large datasets
+      contacts = getAllRows(conn, sqlSelect(
+        table = "contacts",
+        select = [
+          "contacts.id",
+          "contacts.uuid",
+          "contacts.email",
+          "contacts.name",
+          "contacts.requires_double_opt_in",
+          "contacts.double_opt_in",
+          "contacts.double_opt_in_data",
+          "contacts.bounced_at",
+          "contacts.complained_at",
+          "to_char(contacts.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+          "to_char(contacts.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+          "contacts.status",
+          "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') AS sent_emails_count",
+          "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') AS pending_emails_count",
+          "(SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) AS email_opens_count",
+          "(SELECT COUNT(*) FROM email_clicks WHERE email_clicks.user_id = contacts.id) AS email_clicks_count",
+          "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
+          "contacts.meta->>'country' AS country",
+          "CASE WHEN COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') = 0 THEN 0 ELSE (SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) * 100 / COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') END AS opening_rate",
+          "contacts.has_unsubscribed",
+          "contacts.unsubscribed_at",
+          "contacts.unscribed_from_lists"
+        ],
+        joinargs = [
+          (table: "pending_emails", tableAs: "", on: @["contacts.id = pending_emails.user_id"])
+        ],
+        customSQL = "GROUP BY contacts.id ORDER BY contacts.created_at DESC LIMIT $1 OFFSET $2".format(
+          $limit,
+          $offset
+        )))
+    else:
+      # Simple query — no JOIN, no correlated subqueries for opens/clicks/rates
+      contacts = getAllRows(conn, sqlSelect(
+        table = "contacts",
+        select = [
+          "contacts.id",
+          "contacts.uuid",
+          "contacts.email",
+          "contacts.name",
+          "contacts.requires_double_opt_in",
+          "contacts.double_opt_in",
+          "contacts.double_opt_in_data",
+          "contacts.bounced_at",
+          "contacts.complained_at",
+          "to_char(contacts.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+          "to_char(contacts.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+          "contacts.status",
+          "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
+          "contacts.meta->>'country' AS country",
+          "contacts.has_unsubscribed",
+          "contacts.unsubscribed_at",
+          "contacts.unscribed_from_lists"
+        ],
+        customSQL = "ORDER BY contacts.created_at DESC LIMIT $1 OFFSET $2".format(
+          $limit,
+          $offset
+        )))
 
     contactsCount = getValue(conn, sqlSelect(
       table = "contacts",
@@ -711,30 +743,51 @@ proc(request: Request) =
   var bodyJson = parseJson("[]")
   let fakeJson = parseJson("{}")
   for contact in contacts:
-    bodyJson.add( %* {
-      "id": contact[0],
-      "uuid": contact[1],
-      "email": contact[2],
-      "name": contact[3],
-      "requires_double_opt_in": (contact[4] == "t"),
-      "double_opt_in": (contact[5] == "t"),
-      "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: fakeJson),
-      "bounced_at": contact[7].split(".")[0],
-      "complained_at": contact[8].split(".")[0],
-      "created_at": contact[9].split(".")[0],
-      "updated_at": contact[10].split(".")[0],
-      "status": contact[11],
-      "emails_count_sent": contact[12].parseInt(),
-      "emails_count_pending": contact[13].parseInt(),
-      "emails_count_open": contact[14].parseInt(),
-      "emails_count_clicks": contact[15].parseInt(),
-      "subscribed_lists": contact[16],
-      "country": contact[17],
-      "opening_rate": contact[18].parseInt(),
-      "has_unsubscribed": (contact[19] == "t"),
-      "unsubscribed_at": contact[20].split(".")[0],
-      "unscribed_from_lists": contact[21],
-    })
+    if analyticsMode:
+      bodyJson.add( %* {
+        "id": contact[0],
+        "uuid": contact[1],
+        "email": contact[2],
+        "name": contact[3],
+        "requires_double_opt_in": (contact[4] == "t"),
+        "double_opt_in": (contact[5] == "t"),
+        "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: fakeJson),
+        "bounced_at": contact[7].split(".")[0],
+        "complained_at": contact[8].split(".")[0],
+        "created_at": contact[9].split(".")[0],
+        "updated_at": contact[10].split(".")[0],
+        "status": contact[11],
+        "emails_count_sent": contact[12].parseInt(),
+        "emails_count_pending": contact[13].parseInt(),
+        "emails_count_open": contact[14].parseInt(),
+        "emails_count_clicks": contact[15].parseInt(),
+        "subscribed_lists": contact[16],
+        "country": contact[17],
+        "opening_rate": contact[18].parseInt(),
+        "has_unsubscribed": (contact[19] == "t"),
+        "unsubscribed_at": contact[20].split(".")[0],
+        "unscribed_from_lists": contact[21],
+      })
+    else:
+      bodyJson.add( %* {
+        "id": contact[0],
+        "uuid": contact[1],
+        "email": contact[2],
+        "name": contact[3],
+        "requires_double_opt_in": (contact[4] == "t"),
+        "double_opt_in": (contact[5] == "t"),
+        "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: fakeJson),
+        "bounced_at": contact[7].split(".")[0],
+        "complained_at": contact[8].split(".")[0],
+        "created_at": contact[9].split(".")[0],
+        "updated_at": contact[10].split(".")[0],
+        "status": contact[11],
+        "subscribed_lists": contact[12],
+        "country": contact[13],
+        "has_unsubscribed": (contact[14] == "t"),
+        "unsubscribed_at": contact[15].split(".")[0],
+        "unscribed_from_lists": contact[16],
+      })
 
   resp Http200, (
     %* {

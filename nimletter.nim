@@ -191,7 +191,7 @@ when isMainModule:
     echo "TESTING_BUILD_AND_QUIT #2"
     quit(0)
 
-
+  databaseMigrate()
 
   #
   # Mailing thread
