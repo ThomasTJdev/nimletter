@@ -217,6 +217,23 @@ proc(request: Request) =
         flowIDRaw, listID
       )
 
+      # Detaching the flow must also stop mail already in flight for contacts
+      # mid-sequence on this list. Cancel only the not-yet-sent rows for this
+      # exact flow+list pairing, so the same flow attached to other lists is
+      # unaffected.
+      exec(conn, sqlUpdate(
+          table = "pending_emails",
+          data  = [
+            "status = 'cancelled'"
+          ],
+          where = [
+            "flow_id = ?",
+            "list_id = ?",
+            "status IN ('pending', 'inprogress')"
+          ]),
+        flowIDRaw, listID
+      )
+
   else:
     #
     # Validate flow ID
@@ -314,6 +331,23 @@ proc(request: Request) =
         ],
         where = ["list_id = ?"]),
       listID)
+
+    # Remove subscribers from the deleted list so the membership no longer
+    # lingers. Covers both confirmed subscriptions and contacts still waiting
+    # on double opt-in (pending_lists), otherwise either could re-trigger the
+    # list's flows later.
+    exec(conn, sqlDelete(
+        table = "subscriptions",
+        where = ["list_id = ?"]),
+      listID)
+
+    exec(conn, sqlUpdate(
+        table = "contacts",
+        data  = [
+          "pending_lists = array_remove(pending_lists, ?)"
+        ],
+        where = ["pending_lists @> ARRAY[?]::int[]"]),
+      listID, listID)
 
   resp Http200
 )

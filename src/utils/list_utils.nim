@@ -29,8 +29,23 @@ proc listIDfromIdentifier*(listIdentifer: string): string =
     result = getValue(conn, sqlSelect(
         table = "lists",
         select = ["id"],
-        where = ["identifier = ?"]
+        where = ["identifier = ?", "is_deleted IS NULL"]
       ), listIdentifer)
+
+
+proc isListDeleted*(listID: string): bool =
+  ## A list is soft-deleted via lists.is_deleted (never hard-deleted). Callers
+  ## on the subscribe/enqueue path must use this to avoid re-subscribing
+  ## contacts to a "deleted" list, which would otherwise keep generating mail.
+  if listID == "":
+    return false
+
+  pg.withConnection conn:
+    result = getValue(conn, sqlSelect(
+        table = "lists",
+        select = ["id"],
+        where = ["id = ?", "is_deleted IS NOT NULL"]
+      ), listID).len() > 0
 
 
 proc listIDsFromUUIDs*(uuids: seq[string], includeDefaultList = true): tuple[requireOptIn: bool, ids: seq[string]] =
@@ -48,7 +63,7 @@ proc listIDsFromUUIDs*(uuids: seq[string], includeDefaultList = true): tuple[req
     let data = getAllRows(conn, sqlSelect(
         table = "lists",
         select = ["id", "require_optin"],
-        where = ["uuid = ANY(?::uuid[])"]
+        where = ["uuid = ANY(?::uuid[])", "is_deleted IS NULL"]
       ), "{" & uuids.join(",") & "}")
 
     for row in data:

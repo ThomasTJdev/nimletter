@@ -141,6 +141,17 @@ proc(request: Request) =
         where = ["id = ?"]),
       flowID)
 
+    # Detach the flow from every list. Otherwise the flow ID lingers in
+    # lists.flow_ids and new subscribers would keep triggering step 1 of a
+    # "deleted" flow.
+    exec(conn, sqlUpdate(
+        table = "lists",
+        data  = [
+          "flow_ids = array_remove(flow_ids, ?)"
+        ],
+        where = ["flow_ids @> ARRAY[?]::int[]"]),
+      flowID, flowID)
+
     exec(conn, sqlUpdate(
         table = "pending_emails",
         data  = [

@@ -123,6 +123,19 @@ proc createPendingEmailFromFlowstep*(userID, listID, flowID: string, stepNumber:
 
   echo "Creating pending email from flowID " & flowID & " and step " & $stepNumber & " for user " & userID
 
+  # Guard against soft-deleted flows. A flow is never hard-deleted; it is only
+  # marked via flows.is_deleted. Without this check, deleted flows keep being
+  # re-queued through every enqueue path that funnels here (new subscriptions,
+  # post-send step chaining, open/click triggers, list re-attach), so mails
+  # keep appearing even after the flow was "deleted".
+  pg.withConnection conn:
+    if getValue(conn, sqlSelect(
+      table  = "flows",
+      select = ["id"],
+      where  = ["id = ?", "is_deleted IS NULL"]
+    ), flowID) == "":
+      return
+
   var flowStep: seq[string]
   pg.withConnection conn:
     flowStep = getRow(conn, sqlSelect(
@@ -143,7 +156,6 @@ proc createPendingEmailFromFlowstep*(userID, listID, flowID: string, stepNumber:
     ), flowID, stepNumber)
 
   if flowStep[0] == "":
-    echo "Flow end reached"
     return
 
   createPendingEmail(

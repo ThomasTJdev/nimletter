@@ -107,6 +107,11 @@ proc moveFromPendingToSubscription*(userID: string) =
         return
 
       for listID in lists:
+        # Skip lists that were soft-deleted while the contact was awaiting
+        # double opt-in, so confirming opt-in cannot revive a deleted list.
+        if isListDeleted(listID):
+          echo "List " & listID & " is deleted - skipping pending subscription for user " & userID
+          continue
         try:
           if execAffectedRows(conn, sqlInsert(
               table = "subscriptions",
@@ -166,6 +171,12 @@ proc isContactOnList*(userID, listID: string): bool =
 
 
 proc addContactToList*(userID, listID: string, flowStep = 1): bool =
+  # Never subscribe to a soft-deleted list; doing so would re-arm its flows and
+  # keep generating mail after the list was "deleted".
+  if isListDeleted(listID):
+    echo "List " & listID & " is deleted - skipping subscription for user " & userID
+    return false
+
   pg.withConnection conn:
     if isContactOnList(userID, listID):
       return true
