@@ -68,14 +68,14 @@ proc updateUserBounce(mail: MailBounce) =
       where = "id = ?"
     ), mailData.id)
 
+    # bounced_at uses the column DEFAULT; sqlInsert cannot take "col = CURRENT_TIMESTAMP".
     exec(conn, sqlInsert(
       table = "email_bounces",
       data  = [
         "pending_email_id",
         "user_id",
-        "bounces_at = CURRENT_TIMESTAMP",
         "bounce_type",
-        "bounce_sub_type",
+        "bounce_subtype",
         "diagnostic_code",
         "status",
         "message_id",
@@ -134,13 +134,13 @@ proc updateUserComplaint(mail: MailComplaint) =
       where = "id = ?"
     ), mailData.id)
 
+    # complained_at uses the column DEFAULT; sqlInsert cannot take "col = CURRENT_TIMESTAMP".
     exec(conn, sqlInsert(
       table = "email_complaints",
       data  = [
         "pending_email_id",
         "user_id",
-        "complained_at = CURRENT_TIMESTAMP",
-        "complaint_feedback_type",
+        "complaint_feedback",
         "message_id",
       ]),
       mailData.id, mailData.userID, mail.complaintFeedbackType, mail.messageID
