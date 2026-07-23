@@ -80,13 +80,13 @@ proc updateUserBounce(mail: MailBounce) =
         "status",
         "message_id",
       ]),
-      mailData.id, mailData.userID, mail.bounceType, mail.bounceSubType, mail.diagnosticCode, mail.status, mail.messageID
+      mailData.id, mailData.userID, $mail.bounceType, $mail.bounceSubType, mail.diagnosticCode, mail.status, mail.messageID
     )
 
   let data = %* {
       "success": true,
-      "bounceType": mail.bounceType,
-      "bounceSubType": mail.bounceSubType,
+      "bounceType": $mail.bounceType,
+      "bounceSubType": $mail.bounceSubType,
       "email": mailData.userEmail,
       "username": mailData.userName,
       "status": mail.status,
@@ -148,7 +148,7 @@ proc updateUserComplaint(mail: MailComplaint) =
 
   let data = %* {
       "success": true,
-      "complaintFeedbackType": mail.complaintFeedbackType,
+      "complaintFeedbackType": $mail.complaintFeedbackType,
       "arrivalDate": mail.arrivalDate,
       "email": mailData.userEmail,
       "username": mailData.userName,
@@ -276,6 +276,9 @@ var webhooksSnsRouter*: Router
 
 webhooksSnsRouter.post("/webhook/incoming/sns/@key",
 proc(request: Request) =
+  ## AWS SNS / SES event intake.
+  ## Must never surface a 5xx: SNS retries on 5xx and will flood monitoring.
+  ## Auth/parse failures → 400. Processing failures are logged and still 200.
   when defined(dev):
     echo "Received SNS webhook"
 
@@ -288,44 +291,62 @@ proc(request: Request) =
     echo request.body
     resp Http400
 
-
-  # Case through the different types of events
-  case snsParseEventType(snsMsg)
-  of SNSSubscriptionConfirmation:
-    let sub = snsSubscriptionConfirmation(snsMsg)
-    echo sub.message
-    echo sub.subscribeURL
-
-
-  of Bounce:
-    let mailBounce = snsParseBounce(snsMsg)
-    for mail in mailBounce:
-      updateUserBounce(mail)
+  try:
+    # Case through the different types of events
+    case snsParseEventType(snsMsg)
+    of SNSSubscriptionConfirmation:
+      let sub = snsSubscriptionConfirmation(snsMsg)
+      echo sub.message
+      echo sub.subscribeURL
 
 
-  of Complaint:
-    let mailComplaint = snsParseComplaint(snsMsg)
-    for mail in mailComplaint:
-      updateUserComplaint(mail)
+    of Bounce:
+      # 0.1.2+: parse failures return @[] instead of raising.
+      let mailBounce = snsParseBounce(snsMsg)
+      for mail in mailBounce:
+        if mail.parsingSucceeded:
+          updateUserBounce(mail)
 
 
-  of Delivery:
-    let mailDelivery = snsParseDelivery(snsMsg)
-    echo $mailDelivery.email & " - " & mailDelivery.messageID
+    of Complaint:
+      let mailComplaint = snsParseComplaint(snsMsg)
+      for mail in mailComplaint:
+        if mail.parsingSucceeded:
+          updateUserComplaint(mail)
 
 
-  of Open:
-    let mailOpen = snsParseOpen(snsMsg)
-    updateUserOpen(mailOpen)
+    of Delivery:
+      let mailDelivery = snsParseDelivery(snsMsg)
+      if mailDelivery.parsingSucceeded:
+        echo $mailDelivery.email & " - " & mailDelivery.messageID
+      else:
+        echo "Error parsing SNS delivery payload"
 
 
-  of Click:
-    let mailClick = snsParseClick(snsMsg)
-    updateUserClick(mailClick)
+    of Open:
+      let mailOpen = snsParseOpen(snsMsg)
+      if mailOpen.parsingSucceeded:
+        updateUserOpen(mailOpen)
+      else:
+        echo "Error parsing SNS open payload"
 
 
-  else:
-    echo "Unknown event type: " & request.body
+    of Click:
+      let mailClick = snsParseClick(snsMsg)
+      if mailClick.parsingSucceeded:
+        updateUserClick(mailClick)
+      else:
+        echo "Error parsing SNS click payload"
+
+
+    else:
+      echo "Unknown event type: " & request.body
+
+  except CatchableError as err:
+    # Acknowledge the notification so SNS stops retrying; the error is logged
+    # for investigation (DB blip, bad row, outbound webhook side effects, etc.).
+    echo "SNS webhook processing error: " & err.msg
+    echo request.body
 
   resp Http200
 

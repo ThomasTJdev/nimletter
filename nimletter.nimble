@@ -1,6 +1,6 @@
 # Package
 
-version       = "1.0.2"
+version       = "1.0.3"
 author        = "ThomasTJdev"
 description   = "Newsletter"
 license       = "AGPL v3"
@@ -23,6 +23,6 @@ requires "https://github.com/ThomasTJdev/nim_awsSigV4 >= 0.0.3"
 #requires "https://github.com/ThomasTJdev/ready == 0.1.8"
 
 requires "https://github.com/ThomasTJdev/nim_sqlbuilder >= 1.1.1"
-requires "https://github.com/ThomasTJdev/nim_awsSES_SNS >= 0.0.1"
+requires "https://github.com/ThomasTJdev/nim_awsSES_SNS >= 0.1.2"
 requires "https://github.com/ThomasTJdev/nim_yubikey_otp.git >= 0.1.2"
 
