@@ -659,6 +659,8 @@ proc(request: Request) =
   ## Returns contacts list. Pass ?analytics=true to include email engagement
   ## stats (opens, clicks, rates). Omitting analytics keeps the query fast
   ## by skipping expensive correlated subqueries and the pending_emails JOIN.
+  ##
+  ## List names are loaded in one aggregated query (not a per-row subquery).
   createTFD()
   if not c.loggedIn: resp Http401
 
@@ -669,6 +671,7 @@ proc(request: Request) =
 
   var
     contacts: seq[seq[string]]
+    listAggRows: seq[seq[string]]
     contactsCount: int
 
   pg.withConnection conn:
@@ -683,7 +686,6 @@ proc(request: Request) =
           "contacts.name",
           "contacts.requires_double_opt_in",
           "contacts.double_opt_in",
-          "contacts.double_opt_in_data",
           "contacts.bounced_at",
           "contacts.complained_at",
           "to_char(contacts.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
@@ -693,7 +695,6 @@ proc(request: Request) =
           "COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'pending') AS pending_emails_count",
           "(SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) AS email_opens_count",
           "(SELECT COUNT(*) FROM email_clicks WHERE email_clicks.user_id = contacts.id) AS email_clicks_count",
-          "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
           "contacts.meta->>'country' AS country",
           "CASE WHEN COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') = 0 THEN 0 ELSE (SELECT COUNT(*) FROM email_opens WHERE email_opens.user_id = contacts.id) * 100 / COUNT(pending_emails.id) FILTER (WHERE pending_emails.status = 'sent') END AS opening_rate",
           "contacts.has_unsubscribed",
@@ -708,7 +709,7 @@ proc(request: Request) =
           $offset
         )))
     else:
-      # Simple query — no JOIN, no correlated subqueries for opens/clicks/rates
+      # Simple query — no JOIN, no correlated subqueries
       contacts = getAllRows(conn, sqlSelect(
         table = "contacts",
         select = [
@@ -718,13 +719,11 @@ proc(request: Request) =
           "contacts.name",
           "contacts.requires_double_opt_in",
           "contacts.double_opt_in",
-          "contacts.double_opt_in_data",
           "contacts.bounced_at",
           "contacts.complained_at",
           "to_char(contacts.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
           "to_char(contacts.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
           "contacts.status",
-          "(SELECT STRING_AGG(lists.name, ', ') FROM subscriptions JOIN lists ON subscriptions.list_id = lists.id WHERE subscriptions.user_id = contacts.id) AS subscribed_lists",
           "contacts.meta->>'country' AS country",
           "contacts.has_unsubscribed",
           "contacts.unsubscribed_at",
@@ -735,14 +734,26 @@ proc(request: Request) =
           $offset
         )))
 
+    # One GROUP BY for all list names instead of a correlated subquery per contact
+    listAggRows = getAllRows(conn, sql("""
+      SELECT subscriptions.user_id,
+             COALESCE(STRING_AGG(lists.name, ', '), '')
+      FROM subscriptions
+      JOIN lists ON lists.id = subscriptions.list_id
+      GROUP BY subscriptions.user_id
+    """))
+
     contactsCount = getValue(conn, sqlSelect(
       table = "contacts",
       select = ["COUNT(*)"])).parseInt()
 
+  var listsByUser = initTable[string, string]()
+  for row in listAggRows:
+    listsByUser[row[0]] = row[1]
 
   var bodyJson = parseJson("[]")
-  let fakeJson = parseJson("{}")
   for contact in contacts:
+    let subscribedLists = listsByUser.getOrDefault(contact[0], "")
     if analyticsMode:
       bodyJson.add( %* {
         "id": contact[0],
@@ -751,22 +762,21 @@ proc(request: Request) =
         "name": contact[3],
         "requires_double_opt_in": (contact[4] == "t"),
         "double_opt_in": (contact[5] == "t"),
-        "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: fakeJson),
-        "bounced_at": contact[7].split(".")[0],
-        "complained_at": contact[8].split(".")[0],
-        "created_at": contact[9].split(".")[0],
-        "updated_at": contact[10].split(".")[0],
-        "status": contact[11],
-        "emails_count_sent": contact[12].parseInt(),
-        "emails_count_pending": contact[13].parseInt(),
-        "emails_count_open": contact[14].parseInt(),
-        "emails_count_clicks": contact[15].parseInt(),
-        "subscribed_lists": contact[16],
-        "country": contact[17],
-        "opening_rate": contact[18].parseInt(),
-        "has_unsubscribed": (contact[19] == "t"),
-        "unsubscribed_at": contact[20].split(".")[0],
-        "unscribed_from_lists": contact[21],
+        "bounced_at": contact[6].split(".")[0],
+        "complained_at": contact[7].split(".")[0],
+        "created_at": contact[8].split(".")[0],
+        "updated_at": contact[9].split(".")[0],
+        "status": contact[10],
+        "emails_count_sent": contact[11].parseInt(),
+        "emails_count_pending": contact[12].parseInt(),
+        "emails_count_open": contact[13].parseInt(),
+        "emails_count_clicks": contact[14].parseInt(),
+        "subscribed_lists": subscribedLists,
+        "country": contact[15],
+        "opening_rate": contact[16].parseInt(),
+        "has_unsubscribed": (contact[17] == "t"),
+        "unsubscribed_at": contact[18].split(".")[0],
+        "unscribed_from_lists": contact[19],
       })
     else:
       bodyJson.add( %* {
@@ -776,17 +786,16 @@ proc(request: Request) =
         "name": contact[3],
         "requires_double_opt_in": (contact[4] == "t"),
         "double_opt_in": (contact[5] == "t"),
-        "double_opt_in_data": (if contact[6] != "": parseJson(contact[6]) else: fakeJson),
-        "bounced_at": contact[7].split(".")[0],
-        "complained_at": contact[8].split(".")[0],
-        "created_at": contact[9].split(".")[0],
-        "updated_at": contact[10].split(".")[0],
-        "status": contact[11],
-        "subscribed_lists": contact[12],
-        "country": contact[13],
-        "has_unsubscribed": (contact[14] == "t"),
-        "unsubscribed_at": contact[15].split(".")[0],
-        "unscribed_from_lists": contact[16],
+        "bounced_at": contact[6].split(".")[0],
+        "complained_at": contact[7].split(".")[0],
+        "created_at": contact[8].split(".")[0],
+        "updated_at": contact[9].split(".")[0],
+        "status": contact[10],
+        "subscribed_lists": subscribedLists,
+        "country": contact[11],
+        "has_unsubscribed": (contact[12] == "t"),
+        "unsubscribed_at": contact[13].split(".")[0],
+        "unscribed_from_lists": contact[14],
       })
 
   resp Http200, (

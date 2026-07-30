@@ -155,6 +155,7 @@ function tableContacts(analyticsMode = false) {
   objTableContacts = new Tabulator("#contacts", {
     height:"70vh",
     layout:"fitColumns",
+    index:"id",
     ajaxURL: analyticsMode ? "/api/contacts/all?analytics=true" : "/api/contacts/all",
     paginationSize:15000,
     progressiveLoad:"load",

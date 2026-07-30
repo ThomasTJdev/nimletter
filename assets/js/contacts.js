@@ -4,6 +4,53 @@ let
   globalContact,
   globalContactID;
 
+// Patch a single contacts-table row instead of reloading the full list.
+function updateContactsTableRow(fields) {
+  if (!objTableContacts || globalContactID == null) {
+    return;
+  }
+  const row =
+    objTableContacts.getRow(String(globalContactID)) ||
+    objTableContacts.getRow(Number(globalContactID));
+  if (row) {
+    row.update(fields);
+  }
+}
+
+// Keep the open contact's table row in sync after the detail panel reloads.
+function syncContactsTableRowFromGlobal() {
+  if (!globalContact) {
+    return;
+  }
+  const subscribedLists = (globalContact.subscriptions || [])
+    .map(item => item.list_name)
+    .join(", ");
+  updateContactsTableRow({
+    uuid: globalContact.uuid,
+    email: globalContact.email,
+    name: globalContact.name,
+    status: globalContact.status,
+    requires_double_opt_in: globalContact.requires_double_opt_in,
+    double_opt_in: globalContact.double_opt_in,
+    country: (globalContact.meta && globalContact.meta.country) || "",
+    subscribed_lists: subscribedLists,
+    has_unsubscribed: globalContact.has_unsubscribed,
+    unsubscribed_at: globalContact.unsubscribed_at
+      ? String(globalContact.unsubscribed_at).split(".")[0]
+      : "",
+    unscribed_from_lists: globalContact.unscribed_from_lists || "",
+    bounced_at: globalContact.bounced_at
+      ? String(globalContact.bounced_at).split(".")[0]
+      : "",
+    complained_at: globalContact.complained_at
+      ? String(globalContact.complained_at).split(".")[0]
+      : "",
+    updated_at: globalContact.updated_at
+      ? String(globalContact.updated_at).split(".")[0]
+      : "",
+  });
+}
+
 // -- Create contact
 function addContact() {
   const html = jsCreateElement('div', {
@@ -136,7 +183,28 @@ function addContactDo() {
   .then(data => {
     if (data.success == true) {
       dqs(".modalpop").remove();
-      objTableContacts.setData();
+      // Add the new row locally — avoid refetching the entire contacts list.
+      if (objTableContacts) {
+        const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+        objTableContacts.addData([{
+          id: String(data.id),
+          uuid: data.uuid || "",
+          email: email,
+          name: name,
+          status: "enabled",
+          requires_double_opt_in: requiresDoubleOptIn,
+          double_opt_in: false,
+          country: (data.meta && data.meta.country) || "",
+          subscribed_lists: "",
+          has_unsubscribed: false,
+          unsubscribed_at: "",
+          unscribed_from_lists: "",
+          bounced_at: "",
+          complained_at: "",
+          created_at: now,
+          updated_at: now,
+        }], true);
+      }
       loadContact(data.id);
     }
   });
@@ -178,6 +246,7 @@ function loadContact(contactID) {
   .then(data => {
     globalContact = data.data[0];
     buildContactHTML(globalContact);
+    syncContactsTableRowFromGlobal();
   });
 
 }
@@ -857,8 +926,8 @@ function addContactToListDo(listID) {
   .then(manageErrors)
   .then(() => {
     dqs(".modalpop").remove();
+    // loadContact also syncs the table row's subscribed_lists in place
     loadContact(globalContactID);
-    objTableContacts.setData();
   });
 }
 
@@ -873,8 +942,8 @@ function removeContactFromList(self, listID, listType) {
   })
   .then(manageErrors)
   .then(() => {
+    // loadContact also syncs the table row's subscribed_lists in place
     loadContact(globalContactID);
-    objTableContacts.setData();
   });
 }
 
@@ -895,6 +964,19 @@ function contactUpdate() {
     meta[key] = value;
   });
 
+  // Skip the API when nothing changed (blur fires even without edits).
+  if (
+    globalContact &&
+    globalContact.email === email &&
+    globalContact.name === name &&
+    globalContact.status === status &&
+    globalContact.requires_double_opt_in === requiresDoubleOptIn &&
+    globalContact.double_opt_in === doubleOptIn &&
+    JSON.stringify(globalContact.meta || {}) === JSON.stringify(meta)
+  ) {
+    return;
+  }
+
   fetch("/api/contacts/update", {
     method: "POST",
     body: JSON.stringify({
@@ -909,15 +991,35 @@ function contactUpdate() {
   })
   .then(manageErrors)
   .then(() => {
-    // If the update is double opt-in, we need to reload the contact
-    if (
+    const optInChanged =
       globalContact.requires_double_opt_in != requiresDoubleOptIn ||
-      globalContact.double_opt_in != doubleOptIn
-    ) {
-      loadContact(globalContactID);
+      globalContact.double_opt_in != doubleOptIn;
+
+    // Keep local state and the visible row in sync without refetching all contacts.
+    if (globalContact) {
+      globalContact.email = email;
+      globalContact.name = name;
+      globalContact.status = status;
+      globalContact.requires_double_opt_in = requiresDoubleOptIn;
+      globalContact.double_opt_in = doubleOptIn;
+      globalContact.meta = meta;
+      globalContact.updated_at = new Date().toISOString().slice(0, 19).replace("T", " ");
     }
 
-    objTableContacts.setData();
+    updateContactsTableRow({
+      email: email,
+      name: name,
+      status: status,
+      requires_double_opt_in: requiresDoubleOptIn,
+      double_opt_in: doubleOptIn,
+      country: meta.country || "",
+      updated_at: globalContact ? globalContact.updated_at : undefined,
+    });
+
+    // Opt-in flips can move list memberships — reload the detail panel only.
+    if (optInChanged) {
+      loadContact(globalContactID);
+    }
   })
 }
 
