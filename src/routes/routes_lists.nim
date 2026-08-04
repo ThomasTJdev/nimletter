@@ -355,30 +355,61 @@ proc(request: Request) =
 
 listsRouter.get("/api/lists/all",
 proc(request: Request) =
+  ## Returns lists. Pass ?analytics=true to include send/engagement stats
+  ## (sent, pending, opens, clicks, rates). Omitting analytics skips the
+  ## expensive correlated subqueries so the default view stays fast.
   createTFD()
   if not c.loggedIn: resp Http401
+
+  let
+    analyticsMode = @"analytics" == "true"
 
   var
     lists: seq[seq[string]]
     listsCount: int
   pg.withConnection conn:
-    lists = getAllRows(conn, sqlSelect(
-        table   = "lists",
-        select  = [
-          "lists.id",
-          "lists.uuid",
-          "lists.name",
-          "lists.identifier",
-          "lists.description",
-          "array_to_string(lists.flow_ids, ',') as flows",
-          "to_char(lists.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
-          "to_char(lists.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
-          "(SELECT COUNT(*) FROM subscriptions WHERE subscriptions.list_id = lists.id) as user_count",
-          "lists.require_optin"
-        ],
-        where   = ["lists.is_deleted IS NULL"],
-        customSQL = "ORDER BY lists.name ASC",
-      ))
+    if analyticsMode:
+      # Full query including per-list send/engagement counts — slower on large datasets
+      lists = getAllRows(conn, sqlSelect(
+          table   = "lists",
+          select  = [
+            "lists.id",
+            "lists.uuid",
+            "lists.name",
+            "lists.identifier",
+            "lists.description",
+            "array_to_string(lists.flow_ids, ',') as flows",
+            "to_char(lists.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+            "to_char(lists.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+            "(SELECT COUNT(*) FROM subscriptions WHERE subscriptions.list_id = lists.id) as user_count",
+            "lists.require_optin",
+            "(SELECT COUNT(*) FROM pending_emails WHERE pending_emails.list_id = lists.id AND pending_emails.status = 'sent') as sent_count",
+            "(SELECT COUNT(*) FROM pending_emails WHERE pending_emails.list_id = lists.id AND pending_emails.status = 'pending') as pending_count",
+            "(SELECT COUNT(DISTINCT email_opens.pending_email_id) FROM email_opens INNER JOIN pending_emails pe ON email_opens.pending_email_id = pe.id WHERE pe.list_id = lists.id) as opened_count",
+            "(SELECT COUNT(DISTINCT email_clicks.pending_email_id) FROM email_clicks INNER JOIN pending_emails pe ON email_clicks.pending_email_id = pe.id WHERE pe.list_id = lists.id) as clicked_count",
+            "(SELECT COUNT(DISTINCT email_bounces.pending_email_id) FROM email_bounces INNER JOIN pending_emails pe ON email_bounces.pending_email_id = pe.id WHERE pe.list_id = lists.id) as bounced_count"
+          ],
+          where   = ["lists.is_deleted IS NULL"],
+          customSQL = "ORDER BY lists.name ASC",
+        ))
+    else:
+      lists = getAllRows(conn, sqlSelect(
+          table   = "lists",
+          select  = [
+            "lists.id",
+            "lists.uuid",
+            "lists.name",
+            "lists.identifier",
+            "lists.description",
+            "array_to_string(lists.flow_ids, ',') as flows",
+            "to_char(lists.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at",
+            "to_char(lists.updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at",
+            "(SELECT COUNT(*) FROM subscriptions WHERE subscriptions.list_id = lists.id) as user_count",
+            "lists.require_optin"
+          ],
+          where   = ["lists.is_deleted IS NULL"],
+          customSQL = "ORDER BY lists.name ASC",
+        ))
 
     listsCount = getValue(conn, sqlSelect(
         table = "lists",
@@ -389,18 +420,42 @@ proc(request: Request) =
 
   var bodyJson = parseJson("[]")
   for row in lists:
-    bodyJson.add(%* {
-      "id": row[0],
-      "uuid": row[1],
-      "name": row[2],
-      "identifier": row[3],
-      "description": row[4],
-      "flows": row[5],
-      "created_at": row[6],
-      "updated_at": row[7],
-      "user_count": row[8],
-      "require_optin": row[9] == "t"
-    })
+    if analyticsMode:
+      let sentCount = row[10].parseInt()
+      bodyJson.add(%* {
+        "id": row[0],
+        "uuid": row[1],
+        "name": row[2],
+        "identifier": row[3],
+        "description": row[4],
+        "flows": row[5],
+        "created_at": row[6],
+        "updated_at": row[7],
+        "user_count": row[8],
+        "require_optin": row[9] == "t",
+        "sent_count": sentCount,
+        "pending_count": row[11].parseInt(),
+        "opened_count": row[12].parseInt(),
+        "clicked_count": row[13].parseInt(),
+        "bounced_count": row[14].parseInt(),
+        # Rates are unique counts / sent * 100 (float, one decimal displayed in UI)
+        "open_rate":   if sentCount > 0: (row[12].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+        "click_rate":  if sentCount > 0: (row[13].parseInt().float * 100.0 / sentCount.float) else: 0.0,
+        "bounce_rate": if sentCount > 0: (row[14].parseInt().float * 100.0 / sentCount.float) else: 0.0
+      })
+    else:
+      bodyJson.add(%* {
+        "id": row[0],
+        "uuid": row[1],
+        "name": row[2],
+        "identifier": row[3],
+        "description": row[4],
+        "flows": row[5],
+        "created_at": row[6],
+        "updated_at": row[7],
+        "user_count": row[8],
+        "require_optin": row[9] == "t"
+      })
 
   resp Http200, (
     %* {

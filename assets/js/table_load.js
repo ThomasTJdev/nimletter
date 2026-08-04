@@ -321,35 +321,65 @@ function tableMails(analyticsMode = false) {
 
 */
 let objTableLists;
-function tableLists() {
+function tableLists(analyticsMode = false) {
   dqs("#heading").innerText = "Lists";
   dqs("#infotext").innerHTML = 'A list is where people subscribe - without lists, then people cannot subscribe. Imagine a list being a newsletter for Nim-News - something with either ad-hoc or planned emails. Then you can send direct mails to this list (e.g. "new Nim release!!"), or you can attach multiple flows (e.g. "Nim for starters" and "Nim installation guide").';
-  dqs("#work").innerHTML = addNewButton("lists", "addList()", "Add list");
+
+  const analyticsButton = `
+    <button onclick="tableLists(${!analyticsMode})" style="display: flex; align-items: center; width: 200px; justify-content: center;">
+      <svg style="height:24px; width: 24px;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+      </svg>
+      <div style="margin-left: 5px;">${analyticsMode ? "Hide Analytics" : "Load Analytics"}</div>
+    </button>`;
+
+  dqs("#work").innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(max(200px, 100px), 1fr)); grid-gap: 30px;">
+      ${addNewButtonClean("addList()", "Add list")}
+      ${analyticsButton}
+    </div>
+    <div id="lists"></div>`;
+
+  const baseColumns = [
+    {title:"ID", field:"id", width:60, headerFilter:true},
+    {title:"Name", field:"name", vertAlign: "middle", width:300, headerFilter:true, cssClass:"semibold"},
+    {title:"Description", field:"description", vertAlign: "middle", width:250, headerFilter:true},
+    {title:"Identifier", field:"identifier", vertAlign: "middle", width:200, headerFilter:true},
+    {title:"Contacts", field:"user_count", vertAlign: "middle", width:200, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
+      return cell.getValue() + ' subscribers';
+    }},
+    {title:"Flow Count", field:"flows", vertAlign: "middle", width:200, headerFilter:true},
+    {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 200, headerFilter:true},
+    {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 200, headerFilter:true},
+    {title:"Delete", field:"delete", cssClass:"slimpadding", formatter:function(cell, formatterParams, onRendered){
+      return '<button onclick="removeList(' + cell.getRow().getData().id + ')">Delete</button>';
+    }},
+  ];
+
+  // Analytics columns are fetched separately via ?analytics=true to avoid
+  // slow correlated subqueries on large datasets.
+  const analyticsColumns = [
+    {title:"Sent", field:"sent_count", vertAlign: "middle", width:90, headerFilter:true},
+    {title:"Pending", field:"pending_count", vertAlign: "middle", width:90, headerFilter:true},
+    {title:"Unique Opens", field:"opened_count", vertAlign: "middle", width:115, headerFilter:true},
+    {title:"Unique Clicks", field:"clicked_count", vertAlign: "middle", width:115, headerFilter:true},
+    {title:"Open Rate", field:"open_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+    {title:"Click Rate", field:"click_rate", vertAlign: "middle", width:100, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+    {title:"Bounce Rate", field:"bounce_rate", vertAlign: "middle", width:105, formatter: function(cell) { return cell.getValue().toFixed(1) + "%"; }},
+  ];
+
+  // Insert analytics columns after "Flow Count" and before "Created At"
+  const columns = analyticsMode
+    ? [...baseColumns.slice(0, 6), ...analyticsColumns, ...baseColumns.slice(6)]
+    : baseColumns;
 
   objTableLists = new Tabulator("#lists", {
     height:"70vh",
     layout:"fitColumns",
-    ajaxURL:"/api/lists/all",
+    ajaxURL: analyticsMode ? "/api/lists/all?analytics=true" : "/api/lists/all",
     progressiveLoad:"load",
     paginationSize: 1000,
-    // rowHeight:50,
-    columns:[
-      {title:"ID", field:"id", width:60, headerFilter:true},
-      // {title:"UUID", field:"uuid", width:200},
-      {title:"Name", field:"name", vertAlign: "middle", width:300, headerFilter:true, cssClass:"semibold"},
-      {title:"Description", field:"description", vertAlign: "middle", width:250, headerFilter:true},
-      // {title:"Flow ID", field:"flow_id", vertAlign: "middle", width:200},
-      {title:"Identifier", field:"identifier", vertAlign: "middle", width:200, headerFilter:true},
-      {title:"Contacts", field:"user_count", vertAlign: "middle", width:200, headerFilter:true, formatter:function(cell, formatterParams, onRendered){
-      return cell.getValue() + ' subscribers';
-      }},
-      {title:"Flow Count", field:"flows", vertAlign: "middle", width:200, headerFilter:true},
-      {title:"Created At", field:"created_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 200, headerFilter:true},
-      {title:"Updated At", field:"updated_at", vertAlign: "middle", hozAlign:"center", sorter:"datetime", sorterParams:{ format:"yyyy-MM-dd HH:mm:ss"}, width: 200, headerFilter:true},
-      {title:"Delete", field:"delete", cssClass:"slimpadding", formatter:function(cell, formatterParams, onRendered){
-      return '<button onclick="removeList(' + cell.getRow().getData().id + ')">Delete</button>';
-      }},
-    ],
+    columns: columns,
   });
 
   objTableLists.on("cellClick", function(e, cell){
