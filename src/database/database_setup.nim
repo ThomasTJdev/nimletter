@@ -45,7 +45,7 @@ proc databaseMigrate*() =
     let statement = sqlItem.strip()
     if statement == "" or statement == changelogMarker:
       continue
-    if not statement.startsWith("ALTER TABLE"):
+    if not statement.startsWith("ALTER TABLE") and not statement.startsWith("CREATE INDEX"):
       continue
 
     try:

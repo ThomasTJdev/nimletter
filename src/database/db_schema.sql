@@ -235,6 +235,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- Indexes for efficient querying
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_emails_scheduled_for ON pending_emails (scheduled_for);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_emails_flowstep_include ON pending_emails (flow_step_id) INCLUDE (user_id, status, sent_at, id);
+-- Speeds up the send_once anti-join when bulk-enqueueing list sends
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_emails_mail_user ON pending_emails (mail_id, user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_email_opens_user_id ON email_opens (user_id);
 
@@ -251,3 +253,4 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS unsubscribed_at TIMESTAMP;
 ALTER TABLE contacts ADD COLUMN IF NOT EXISTS unscribed_from_lists TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS link_success TEXT;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_emails_mail_user ON pending_emails (mail_id, user_id);

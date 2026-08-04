@@ -224,5 +224,6 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 -- Indexes for efficient querying
 CREATE INDEX IF NOT EXISTS idx_pending_emails_scheduled_for ON pending_emails (scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_pending_emails_mail_user ON pending_emails (mail_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_email_opens_user_id ON email_opens (user_id);
 CREATE INDEX IF NOT EXISTS idx_email_clicks_user_id ON email_clicks (user_id);

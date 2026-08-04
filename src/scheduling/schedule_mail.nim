@@ -173,6 +173,9 @@ proc createPendingEmailFromFlowstep*(userID, listID, flowID: string, stepNumber:
 
 
 proc createPendingEmailToAllListContacts*(listID, mailID: string): tuple[success: bool, msg: string] =
+  ## Fan-out a list send into pending_emails in one SQL statement.
+  ## The previous per-contact SELECT+INSERT loop did ~2 DB round-trips per
+  ## subscriber on the HTTP thread and caused proxy 504s around ~8k users.
 
   # Check if the email is archived before creating pending emails
   pg.withConnection conn:
@@ -186,41 +189,37 @@ proc createPendingEmailToAllListContacts*(listID, mailID: string): tuple[success
       echo "Email with mailID " & mailID & " is archived - skipping creation of pending emails"
       return (false, "Email with mailID " & mailID & " is archived - skipping creation of pending emails")
 
-  var contacts: seq[seq[string]]
-  pg.withConnection conn:
-    contacts = getAllRows(conn, sqlSelect(
-      table = "subscriptions",
-      select = ["user_id"],
-      where = ["list_id = ?"]
-    ), listID)
+    # Bulk insert: one row per subscriber, honouring mails.send_once the same
+    # way the old loop did (skip users who already have a row for this mail
+    # when send_once is true). Contacts with a hard bounce or spam complaint
+    # on record are skipped to protect sender reputation. Delivery still
+    # happens via the scheduler + mailChannel; this only enqueues.
+    let scheduledFor = $(now().utc).format("yyyy-MM-dd HH:mm:ss")
+    let inserted = execAffectedRows(conn, sql("""
+      INSERT INTO pending_emails (
+        user_id, list_id, mail_id, trigger_type, status, scheduled_for
+      )
+      SELECT
+        s.user_id,
+        ?,
+        ?,
+        'immediate',
+        'pending',
+        ?
+      FROM subscriptions s
+      JOIN contacts c ON c.id = s.user_id
+      WHERE s.list_id = ?
+        AND c.bounced_at IS NULL
+        AND c.complained_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pending_emails pe
+          JOIN mails m ON pe.mail_id = m.id
+          WHERE pe.user_id = s.user_id
+            AND pe.mail_id = ?
+            AND m.send_once = true
+        )
+    """), listID, mailID, scheduledFor, listID, mailID)
 
-  for contact in contacts:
-    # Check the send_once flag
-    pg.withConnection conn:
-      if getValue(conn, sqlSelect(
-        table = "pending_emails",
-        select = ["pending_emails.id"],
-        joinargs = [
-          (table: "mails", tableAs: "", on: @["pending_emails.mail_id = mails.id"])
-        ],
-        where = [
-          "pending_emails.user_id = ?",
-          "pending_emails.mail_id = ?",
-          "mails.send_once = true"
-        ],
-        customSQL = "LIMIT 1"
-      ), contact[0], mailID) != "":
-        echo "User " & contact[0] & " has already received this email"
-        continue
-
-    # Create the pending email
-    createPendingEmail(
-      userID = contact[0],
-      listID = listID,
-      flowID = "",
-      flowStepID = "",
-      mailID = mailID,
-      triggerType = "immediate",
-      status = "pending"
-    )
-  return (true, "Pending emails created for all contacts on list " & listID)
+    echo "Created " & $inserted & " pending emails for list " & listID & " mail " & mailID
+    return (true, "Pending emails created for all contacts on list " & listID)
