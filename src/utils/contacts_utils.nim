@@ -20,6 +20,7 @@ import
 
 import
   ../database/database_connection,
+  ../database/database_queries,
   ../email/email_optin,
   ../scheduling/schedule_mail,
   ../utils/list_utils,
@@ -575,6 +576,89 @@ proc contactRemoveFromList*(userID, listID, listType: string): tuple[success: bo
     "listID": listID,
     "listType": listType
   })
+
+
+proc contactBounce*(body: string): tuple[success: bool, msg: string, data: JsonNode] =
+  ## Record a bounce from an external system and stop all further mail to this address.
+  var
+    email, bounceType, bounceSubtype, diagnosticCode, bounceStatus, messageID: string
+
+  try:
+    let jsonBody = parseJson(body)
+    email           = jsonBody.getOrDefault("email").getStr().toLowerAscii().strip()
+    bounceType      = jsonBody.getOrDefault("bounce_type").getStr().strip()
+    bounceSubtype   = jsonBody.getOrDefault("bounce_subtype").getStr().strip()
+    diagnosticCode  = jsonBody.getOrDefault("diagnostic_code").getStr().strip()
+    bounceStatus    = jsonBody.getOrDefault("status").getStr().strip()
+    messageID       = jsonBody.getOrDefault("message_id").getStr().strip()
+  except:
+    return (false, "Invalid JSON", nil)
+
+  if email.len() > 255 or not email.isValidEmail():
+    return (false, "Invalid email", nil)
+
+  var
+    userID: string
+    bouncedPendingEmailID: string
+    userName: string
+
+  pg.withConnection conn:
+    let existing = getRow(conn, sqlSelect(
+      table = "contacts",
+      select = ["id", "name"],
+      where = ["email = ?"]
+    ), email)
+
+    userID = existing[0]
+    userName = existing[1]
+
+    if userID == "":
+      # Keep the address blocked even if Nimletter has never seen this contact,
+      # so a later contact-create cannot start mailing a known-bad mailbox.
+      userID = $insertID(conn, sqlInsert(
+        table = "contacts",
+        data  = [
+          "email",
+          "name",
+        ]),
+        email,
+        ""
+      )
+      userName = ""
+
+    if messageID != "":
+      bouncedPendingEmailID = getValue(conn, sqlSelect(
+        table = "pending_emails",
+        select = ["id"],
+        where = ["user_id = ?", "message_id = ?"]
+      ), userID, messageID)
+
+  blockContactFromSending(
+    userID = userID,
+    bouncedPendingEmailID = bouncedPendingEmailID,
+    bounceType = bounceType,
+    bounceSubtype = bounceSubtype,
+    diagnosticCode = diagnosticCode,
+    bounceStatus = bounceStatus,
+    messageID = messageID
+  )
+
+  let data = %* {
+    "success": true,
+    "id": userID,
+    "email": email,
+    "username": userName,
+    "bounceType": bounceType,
+    "bounceSubType": bounceSubtype,
+    "status": bounceStatus,
+    "diagnosticCode": diagnosticCode,
+    "messageID": messageID,
+    "event": "email_bounced"
+  }
+
+  parseWebhookEvent(email_bounced, data)
+
+  return (true, "", data)
 
 
 proc contactRemoveFromListBody*(body: string): tuple[success: bool, msg: string, data: JsonNode] =

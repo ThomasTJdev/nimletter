@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS email_clicks (
 
 CREATE TABLE IF NOT EXISTS email_bounces (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-  pending_email_id    INTEGER NOT NULL REFERENCES pending_emails(id),
+  pending_email_id    INTEGER REFERENCES pending_emails(id),
   user_id             INTEGER NOT NULL REFERENCES contacts(id),
   bounced_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
   bounce_type         TEXT,

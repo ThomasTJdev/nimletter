@@ -19,7 +19,8 @@ import
 
 
 import
-  ../database/database_connection
+  ../database/database_connection,
+  ../database/database_queries
 
 import
   ./email_aws_ses,
@@ -126,6 +127,12 @@ proc sendMailMimeNow*(
   ): tuple[success: bool, messageID: string, mailsPerSecond: int] =
 
   let smtpData = smtpData()
+
+  if contactID != "" and contactID != "0":
+    pg.withConnection conn:
+      if contactIsSuppressed(conn, contactID):
+        echo "Not sending email: contact has bounced or complained. contactID: " & contactID
+        return (false, "contact_blocked", 1)
 
   # Header
   let subjectChecked =

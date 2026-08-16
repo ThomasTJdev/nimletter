@@ -14,6 +14,7 @@ import
 
 import
   ../database/database_connection,
+  ../database/database_queries,
   ../utils/auth,
   ../utils/contacts_utils,
   ../utils/list_utils,
@@ -92,6 +93,9 @@ proc(request: Request) =
     let mailID = if mail == "": "" else: getMailIDfromIdent(mail)
 
     pg.withConnection conn:
+      if contactIsSuppressed(conn, userID):
+        resp Http200, ( %* { "success": false, "message": "Contact has bounced or complained and cannot receive emails" } )
+
       # For a specific mailID
       if mailID != "":
         if getValue(conn, sqlSelect(
@@ -250,6 +254,17 @@ proc(request: Request) =
       resp Http400, "List identifier required"
 
     let data = contactRemoveFromList(userID, listID, "")
+    if not data.success:
+      resp Http400, %* {
+        "success": false,
+        "message": data.msg
+      }
+
+    resp Http200, data.data
+
+
+  of "email-bounce":
+    let data = contactBounce(request.body)
     if not data.success:
       resp Http400, %* {
         "success": false,

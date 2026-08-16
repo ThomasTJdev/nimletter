@@ -159,6 +159,24 @@ curl -X POST \
   http://localhost:5555/api/event
 ```
 
+### Block contact after bounce
+When your master system detects a bounce, report it here. Nimletter marks the address as bounced, cancels queued mail, and will not send to it again. If the contact does not exist yet, a blocked stub is created so a later `contact-create` cannot start mailing a known-bad address.
+
+```sh
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+        "event": "email-bounce",
+        "email": "nim@nimletter.com",
+        "bounce_type": "Permanent",
+        "diagnostic_code": "smtp; 550 5.1.1 user unknown"
+      }' \
+  http://localhost:5555/api/event
+```
+
+Optional fields: `bounce_subtype`, `status`, `message_id` (Nimletter message ID, if the bounced send originated here).
+
 ### Create contact
 ```sh
 curl -X POST \

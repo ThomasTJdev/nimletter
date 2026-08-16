@@ -7,3 +7,5 @@ utils/*
 !utils/*.csv
 !utils/*.nim
 !utils/*.md
+utils/*.csv
+!utils/mylist.csv

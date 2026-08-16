@@ -103,6 +103,10 @@ proc createPendingEmail*(
     args.add(manualSubject)
 
   pg.withConnection conn:
+    if contactIsSuppressed(conn, userID):
+      echo "Skipping pending email: contact bounced or complained. userID: " & userID
+      return
+
     # Check if the user already has a pending email for this flow and step
     if flowID.len() > 0 and flowStepID.len() > 0:
       if getValue(conn, sqlSelect(

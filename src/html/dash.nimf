@@ -137,10 +137,20 @@ curl -X POST \
       }' \
   http://localhost:5555/api/event</pre>
 </div>
-
-          </div>
-
-          <div class="examples" style="display: grid; grid-template-columns: 1fr 1fr; grid-gap: 40px;max-width: 1024px; margin-top: 80px;">
+<div>
+<b>Block contact after bounce (cancels pending mail too):</b>
+<pre>
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+        "event": "email-bounce",
+        "email": "nim@nimletter.com",
+        "bounce_type": "Permanent",
+        "diagnostic_code": "smtp; 550 5.1.1 user unknown"
+      }' \
+  http://localhost:5555/api/event</pre>
+</div>
 <div>
 <b>Create contact:</b>
 <pre>
@@ -178,6 +188,7 @@ curl -X POST \
 </pre>
 </div>
 <div>
+  <b>Create contact and add to list:</b>
   <pre>
   curl -X POST \
     -H "Content-Type: application/json" \

@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS email_clicks (
 
 CREATE TABLE IF NOT EXISTS email_bounces (
   id                  SERIAL PRIMARY KEY,
-  pending_email_id    INT NOT NULL REFERENCES pending_emails(id),
+  pending_email_id    INT REFERENCES pending_emails(id),
   user_id             INT NOT NULL REFERENCES contacts(id),
   bounced_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   bounce_type         TEXT,
@@ -254,3 +254,4 @@ ALTER TABLE contacts ADD COLUMN IF NOT EXISTS unscribed_from_lists TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS logo_url TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS link_success TEXT;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_pending_emails_mail_user ON pending_emails (mail_id, user_id);
+ALTER TABLE email_bounces ALTER COLUMN pending_email_id DROP NOT NULL;

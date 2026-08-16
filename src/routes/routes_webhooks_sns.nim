@@ -42,46 +42,15 @@ proc updateUserBounce(mail: MailBounce) =
     if mailData.id == "":
       return
 
-    exec(conn, sqlUpdate(
-      table = "contacts",
-      data  = [
-        "bounced_at = CURRENT_TIMESTAMP",
-      ],
-      where = "id = ?"
-    ), mailData.userID)
-
-    exec(conn, sqlUpdate(
-      table = "pending_emails",
-      data  = [
-        "status = 'cancelled'",
-        "updated_at = CURRENT_TIMESTAMP",
-      ],
-      where = "user_id = ?"
-    ), mailData.userID)
-
-    exec(conn, sqlUpdate(
-      table = "pending_emails",
-      data  = [
-        "status = 'bounced'",
-        "updated_at = CURRENT_TIMESTAMP",
-      ],
-      where = "id = ?"
-    ), mailData.id)
-
-    # bounced_at uses the column DEFAULT; sqlInsert cannot take "col = CURRENT_TIMESTAMP".
-    exec(conn, sqlInsert(
-      table = "email_bounces",
-      data  = [
-        "pending_email_id",
-        "user_id",
-        "bounce_type",
-        "bounce_subtype",
-        "diagnostic_code",
-        "status",
-        "message_id",
-      ]),
-      mailData.id, mailData.userID, $mail.bounceType, $mail.bounceSubType, mail.diagnosticCode, mail.status, mail.messageID
-    )
+  blockContactFromSending(
+    userID = mailData.userID,
+    bouncedPendingEmailID = mailData.id,
+    bounceType = $mail.bounceType,
+    bounceSubtype = $mail.bounceSubType,
+    diagnosticCode = mail.diagnosticCode,
+    bounceStatus = mail.status,
+    messageID = mail.messageID
+  )
 
   let data = %* {
       "success": true,

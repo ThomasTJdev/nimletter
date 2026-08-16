@@ -87,6 +87,90 @@ proc getDataFromPendingEmails*(conn: DbConn, messageID: string): PendingMail =
   return formatObj(data)
 
 
+proc contactIsSuppressed*(conn: DbConn, userID: string): bool =
+  ## True when the contact must not receive mail (hard bounce or spam complaint).
+  getValue(conn, sqlSelect(
+    table = "contacts",
+    select = ["id"],
+    where = [
+      "id = ?",
+      "(bounced_at IS NOT NULL OR complained_at IS NOT NULL)"
+    ]
+  ), userID) != ""
+
+
+proc blockContactFromSending*(
+  userID: string,
+  bouncedPendingEmailID = "",
+  bounceType = "",
+  bounceSubtype = "",
+  diagnosticCode = "",
+  bounceStatus = "",
+  messageID = ""
+) =
+  ## Mark the contact as bounced, cancel queued mail, and record the bounce.
+  ## pending_email_id is optional so an external bounce (no Nimletter send) still blocks the address.
+  pg.withConnection conn:
+    exec(conn, sqlUpdate(
+      table = "contacts",
+      data  = [
+        "bounced_at = CURRENT_TIMESTAMP",
+      ],
+      where = "id = ?"
+    ), userID)
+
+    exec(conn, sqlUpdate(
+      table = "pending_emails",
+      data  = [
+        "status = 'cancelled'",
+        "updated_at = CURRENT_TIMESTAMP",
+      ],
+      where = [
+        "user_id = ?",
+        "status IN ('pending', 'inprogress')"
+      ]
+    ), userID)
+
+    if bouncedPendingEmailID != "":
+      exec(conn, sqlUpdate(
+        table = "pending_emails",
+        data  = [
+          "status = 'bounced'",
+          "updated_at = CURRENT_TIMESTAMP",
+        ],
+        where = "id = ?"
+      ), bouncedPendingEmailID)
+
+    var
+      bounceData = @[
+        "user_id",
+        "bounce_type",
+        "bounce_subtype",
+        "diagnostic_code",
+        "status",
+      ]
+      bounceArgs = @[
+        userID,
+        bounceType,
+        bounceSubtype,
+        diagnosticCode,
+        bounceStatus,
+      ]
+
+    if bouncedPendingEmailID != "":
+      bounceData.add("pending_email_id")
+      bounceArgs.add(bouncedPendingEmailID)
+
+    if messageID != "":
+      bounceData.add("message_id")
+      bounceArgs.add(messageID)
+
+    exec(conn, sqlInsert(
+      table = "email_bounces",
+      data  = bounceData,
+    ), bounceArgs)
+
+
 proc getDataFromPendingEmailsTrigger*(conn: DbConn, flowID, stepNumber, userID: string): PendingMail =
   let data = getRow(conn, sqlSelect(
       table   = "pending_emails",

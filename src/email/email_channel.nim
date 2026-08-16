@@ -82,6 +82,24 @@ proc sendPendingEmail(pendingEmail: PendingMailObj) =
 
   let userData = getUserData(pendingEmail.userID)
 
+  pg.withConnection conn:
+    if contactIsSuppressed(conn, pendingEmail.userID):
+      echo "Skipping send: contact bounced or complained"
+      exec(conn, sqlUpdate(
+        table = "pending_emails",
+        data  = [
+          "status",
+          "updated_at"
+        ],
+        where = [
+          "id = ?"
+        ]),
+        "cancelled",
+        $(now().utc).format("yyyy-MM-dd HH:mm:ss"),
+        pendingEmail.id
+      )
+      return
+
   # Check if the email is archived before attempting to send
   if pendingEmail.mailCategory == "archived":
     echo "Email with mailID " & pendingEmail.mailID & " is archived - skipping send"
