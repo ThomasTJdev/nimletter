@@ -440,6 +440,24 @@ label.labelBold {
   padding-top: 0px;
   padding-bottom: 0px;
 }
+.nl-mobile-preview .nl-mobile-outer {
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+.nl-mobile-outer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  user-select: none;
+}
+.nl-mobile-outer-help {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #666;
+  margin-top: -12px;
+}
 .modalpop.show {
   display: block;
 }
@@ -790,18 +808,193 @@ body.mainbody #mailEditPreview strong {
 
 #rootArea {
   position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   width: 90vw;
   height: 100vh;
   overflow: hidden;
   border: 1px solid var(--colorN40);
 }
+#rootArea > #root {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
 
-.MuiStack-root.css-gu09ps,
-.MuiStack-root.css-1j7a2qb .MuiStack-root.css-j7qwjs,
-.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.css-17kijze {
+.nl-eb-tree {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--colorN10);
+  border-right: 1px solid var(--colorN40);
+  color: var(--colorN800);
+  user-select: none;
+}
+.nl-eb-tree-header {
+  padding: 12px 12px 8px;
+  border-bottom: 1px solid var(--colorN30);
+  flex-shrink: 0;
+}
+body.mainbody #rootArea .nl-eb-tree-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--colorN800);
+}
+.nl-eb-tree-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--colorN100);
+}
+.nl-eb-tree-list {
+  flex: 1;
+  overflow: auto;
+  padding: 6px 0 12px;
+}
+.nl-eb-tree-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--colorN100);
+}
+.nl-eb-tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  margin: 1px 6px;
+  padding-right: 6px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.nl-eb-tree-row:hover {
+  background: var(--colorN20);
+}
+.nl-eb-tree-row.is-selected,
+.nl-eb-tree-row.is-selected:hover {
+  background: #e8f0fe;
+}
+.nl-eb-tree-row.is-slot {
+  cursor: default;
+}
+.nl-eb-tree-row.is-dragging {
+  opacity: 0.45;
+}
+.nl-eb-tree-row.drop-before::before,
+.nl-eb-tree-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: #3461b7;
+  border-radius: 1px;
+  pointer-events: none;
+}
+.nl-eb-tree-row.drop-before::before {
+  top: -1px;
+}
+.nl-eb-tree-row.drop-after::after {
+  bottom: -1px;
+}
+.nl-eb-tree-row.drop-inside {
+  background: #d6e4ff;
+  box-shadow: inset 0 0 0 1px #3461b7;
+}
+body.mainbody #rootArea .nl-eb-tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--colorN400);
+  line-height: 16px;
+}
+body.mainbody #rootArea .nl-eb-tree-chevron:hover {
+  background: var(--colorN30);
+}
+body.mainbody #rootArea .nl-eb-tree-chevron.is-empty {
+  visibility: hidden;
+}
+body.mainbody #rootArea .nl-eb-tree-chevron::before {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent var(--colorN400);
+}
+body.mainbody #rootArea .nl-eb-tree-chevron.is-open::before {
+  border-width: 6px 4px 0 4px;
+  border-color: var(--colorN400) transparent transparent transparent;
+}
+body.mainbody #rootArea .nl-eb-tree-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--colorN800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+body.mainbody #rootArea .nl-eb-tree-row.is-slot .nl-eb-tree-label {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--colorN200);
+}
+.nl-eb-tree-preview {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--colorN100);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nl-eb-tree-grip {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 12px;
+  height: 16px;
+  cursor: grab;
+  opacity: 0.35;
+  background-image: radial-gradient(circle, var(--colorN400) 1.05px, transparent 1.15px);
+  background-size: 6px 6px;
+  background-position: 0 2px;
+}
+.nl-eb-tree-row:hover .nl-eb-tree-grip {
+  opacity: 0.75;
+}
+.nl-eb-tree-grip:active {
+  cursor: grabbing;
+}
+
+/* Hide the Waypoint promo card at the bottom of the EmailBuilder sidebar
+   (logo, "Looking to send emails?" copy, and Learn more button). */
+#rootArea .MuiStack-root:has(> a[href="https://usewaypoint.com?utm_source=emailbuilderjs"]) {
   display: none;
 }
 
+/* .MuiStack-root.css-gu09ps,
+.MuiStack-root.css-1j7a2qb .MuiStack-root.css-j7qwjs,
+.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.css-17kijze {
+  display: none;
+} */
+div.MuiBox-root.css-r0tngf pre {
+  height: auto;
+}
 
 
 /* -- Mail */

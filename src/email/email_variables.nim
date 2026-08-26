@@ -16,7 +16,7 @@ import
 
 randomize()
 
-const htmlHeader = """<!DOCTYPE html><html lang="EN" style="background:#FAFAFA;min-height:100%;"><head><meta charset="UTF-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>$1</title></head><body>"""
+const htmlHeader = """<!DOCTYPE html><html lang="EN" style="background:#FAFAFA;min-height:100%;"><head><meta charset="UTF-8"><meta content="width=device-width, initial-scale=1.0" name="viewport"><title>$1</title><style>@media only screen and (max-width:620px){.nl-mobile-outer{padding-left:8px!important;padding-right:8px!important}}</style></head><body>"""
 
 const htmlFooter = "</body></html>"
 

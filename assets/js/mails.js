@@ -625,6 +625,9 @@ function emailbuilderLoad(callback) {
 
   if (isScriptInjected()) {
     console.log("Script already injected");
+    if (typeof emailbuilderAddonInit === "function") {
+      emailbuilderAddonInit();
+    }
     callback();
   } else {
     loadStylesheetManually("https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css");
@@ -632,7 +635,7 @@ function emailbuilderLoad(callback) {
     .then(() => {
       loadScriptManually(scriptURL)
       .then(() => {
-        emailbuilderAddonSavebtn();
+        emailbuilderAddonInit();
         callback();
       });
     });
@@ -703,7 +706,43 @@ function mailToggleHTMLEditor() {
 }
 
 
+function getCurrentMailHTML() {
+  if (globalMailEditorType === "html" || globalMailEditorType === "") {
+    const textarea = dqs("#mailEditContent");
+    if (textarea) {
+      return textarea.value;
+    }
+  }
+
+  // Only read from the live builder when it is open. The builder store is
+  // global and can still hold a previous mail's document after the modal closes.
+  const builderOpen = dqs(".modalpop.emailbuilder.show") && dqs("#root");
+  if (builderOpen && typeof emailbuilderAddonGetHTML === "function") {
+    try {
+      const html = emailbuilderAddonGetHTML();
+      if (html) {
+        return html;
+      }
+    } catch (error) {
+      console.error("Could not read HTML from EmailBuilder:", error);
+    }
+  }
+
+  const preview = dqs("#mailEditPreviewHTML");
+  if (preview) {
+    return preview.innerHTML;
+  }
+
+  return globalMailEditorHTML || "";
+}
+
+
 function switchEditor() {
+  const switchingToHtml = globalMailEditorType === "emailbuilder";
+  const warning = switchingToHtml
+    ? "This converts the visual layout into HTML. You can keep editing that HTML afterwards. Switching back starts a new visual layout."
+    : "This starts a new visual layout. Existing HTML is kept until you save from the visual editor.";
+
   const html = jsCreateElement('div', {
     attrs: {
       style: "width: 300px;"
@@ -719,7 +758,7 @@ function switchEditor() {
         attrs: {
           class: 'mb20 center'
         },
-        children: ['This will delete all changes made in the current editor.']
+        children: [warning]
       }),
       jsCreateElement('input', {
         attrs: {
@@ -752,22 +791,42 @@ function switchEditor() {
   labelFloater();
 }
 
-function switchEditorDo() {
+async function switchEditorDo() {
   if (dqs("#switchConfirm").value !== "switch") {
     rawModalError("Invalid confirmation");
     return;
   }
-  globalMailEditorType = globalMailEditorType === "emailbuilder" ? "html" : "emailbuilder";
-  dqs(".mailSave").classList.add("active");
-  saveMail(globalMailData.id);
-  setTimeout(() => {
-    loadMail(globalMailData.id);
+
+  const switchingTo = globalMailEditorType === "emailbuilder" ? "html" : "emailbuilder";
+  const contentHTML = getCurrentMailHTML();
+  const contentEditor = switchingTo === "emailbuilder"
+    ? JSON.stringify(typeof emailbuilderAddonClearJSON !== "undefined"
+        ? emailbuilderAddonClearJSON
+        : { root: { type: "EmailLayout", data: { backdropColor: "#F5F5F5", canvasColor: "#FFFFFF", textColor: "#262626", fontFamily: "MODERN_SANS", childrenIds: [] } } })
+    : "";
+
+  globalMailEditorType = switchingTo;
+  globalMailEditorHTML = contentHTML;
+  globalMailEditorContent = contentEditor;
+
+  if (dqs(".mailSave")) {
+    dqs(".mailSave").classList.add("active");
+  }
+
+  await saveMail(globalMailData.id, {
+    contentHTML: contentHTML,
+    contentEditor: contentEditor,
+    skipContent: false
+  });
+
+  if (dqs(".modalpop")) {
     dqs(".modalpop").remove();
-  }, 1000);
+  }
+  loadMail(globalMailData.id);
 }
 
 
-async function saveMail(mailID) {
+async function saveMail(mailID, contentOverride) {
   // if (!dqs(".mailSave").classList.contains("active")) {
   //   return;
   // }
@@ -807,8 +866,13 @@ async function saveMail(mailID) {
     contentEditor,
     skipContent = false;
 
-  if (globalMailEditorType == "html" || globalMailEditorType == "") {
-    contentHTML = dqs("#mailEditContent").value;
+  if (contentOverride) {
+    contentHTML = contentOverride.contentHTML;
+    contentEditor = contentOverride.contentEditor;
+    skipContent = !!contentOverride.skipContent;
+  } else if (globalMailEditorType == "html" || globalMailEditorType == "") {
+    const textarea = dqs("#mailEditContent");
+    contentHTML = textarea ? textarea.value : (globalMailEditorHTML || "");
     contentEditor = "";
   } else {
     contentHTML = typeof emailbuilderAddonGetHTML === 'function' ? emailbuilderAddonGetHTML() : '';
@@ -816,14 +880,12 @@ async function saveMail(mailID) {
     emailbuilderLoadedJSON = contentEditor;
     if (contentEditor == "") {
       skipContent = true;
-    } else {
+    } else if (dqs("#mailEditPreviewHTML")) {
       dqs("#mailEditPreviewHTML").innerHTML = contentHTML;
     }
-    // contentHTML = emailbuilderAddonGetHTML();
-    // contentEditor = emailbuilderAddonGetJson();
   }
 
-  fetch("/api/mails/update", {
+  return fetch("/api/mails/update", {
     method: "POST",
     body: new URLSearchParams({
       mailID: mailID,
@@ -841,7 +903,9 @@ async function saveMail(mailID) {
   })
   .then(manageErrors)
   .then(() => {
-    dqs(".mailSave").classList.remove("active");
+    if (dqs(".mailSave")) {
+      dqs(".mailSave").classList.remove("active");
+    }
     // Update globalMailData to reflect the new category
     if (globalMailData) {
       globalMailData.category = category;
